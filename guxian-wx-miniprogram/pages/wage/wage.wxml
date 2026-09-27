@@ -1,0 +1,8 @@
+<view class="wage">
+  <view class="total-card">
+    <view class="lbl">本月工资（元）</view>
+    <view class="num">{{my.totalWage || 0}}</view>
+    <view class="sub">报工 {{my.count || 0}} 次 / 合格 {{my.totalQualified || 0}} 件</view>
+  </view>
+  <view class="empty" wx:if="{{!my.workerId}}">暂无工资记录</view>
+</view>

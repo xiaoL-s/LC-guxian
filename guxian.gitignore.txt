@@ -1,0 +1,11 @@
+# java编译产物
+target/
+!src/main/resources
+.idea/
+.vscode/
+*.log
+# 敏感配置
+application-dev.yml
+# node前端（vue）
+node_modules/
+dist/

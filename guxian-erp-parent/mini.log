@@ -1,0 +1,31 @@
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+ :: Spring Boot ::               (v3.2.10)
+
+2026-09-24T14:36:19.664+08:00  INFO 24288 --- [guxian-mini-api] [           main] com.guxian.mini.MiniApiApplication       : Starting MiniApiApplication using Java 17.0.17 with PID 24288 (D:\Java\guxian\guxian-erp-parent\guxian-mini-api\target\guxian-mini-api-0.0.1-SNAPSHOT.jar started by Â¬³¬ in D:\Java\guxian\guxian-erp-parent)
+2026-09-24T14:36:19.667+08:00  INFO 24288 --- [guxian-mini-api] [           main] com.guxian.mini.MiniApiApplication       : No active profile set, falling back to 1 default profile: "default"
+2026-09-24T14:36:20.847+08:00  INFO 24288 --- [guxian-mini-api] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Multiple Spring Data modules found, entering strict repository configuration mode
+2026-09-24T14:36:20.852+08:00  INFO 24288 --- [guxian-mini-api] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data Redis repositories in DEFAULT mode.
+2026-09-24T14:36:20.887+08:00  INFO 24288 --- [guxian-mini-api] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 17 ms. Found 0 Redis repository interfaces.
+2026-09-24T14:36:21.823+08:00  INFO 24288 --- [guxian-mini-api] [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port 8086 (http)
+2026-09-24T14:36:21.872+08:00  INFO 24288 --- [guxian-mini-api] [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2026-09-24T14:36:21.873+08:00  INFO 24288 --- [guxian-mini-api] [           main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/10.1.30]
+2026-09-24T14:36:21.936+08:00  INFO 24288 --- [guxian-mini-api] [           main] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring embedded WebApplicationContext
+2026-09-24T14:36:21.938+08:00  INFO 24288 --- [guxian-mini-api] [           main] w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 2205 ms
+ _ _   |_  _ _|_. ___ _ |    _ 
+| | |\/|_)(_| | |_\  |_)||_|_\ 
+     /               |         
+                        3.5.7 
+2026-09-24T14:36:23.963+08:00  INFO 24288 --- [guxian-mini-api] [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port 8086 (http) with context path ''
+2026-09-24T14:36:23.982+08:00  INFO 24288 --- [guxian-mini-api] [           main] com.guxian.mini.MiniApiApplication       : Started MiniApiApplication in 4.779 seconds (process running for 5.267)
+2026-09-24T14:36:24.821+08:00  INFO 24288 --- [guxian-mini-api] [0.0-8086-exec-1] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring DispatcherServlet 'dispatcherServlet'
+2026-09-24T14:36:24.822+08:00  INFO 24288 --- [guxian-mini-api] [0.0-8086-exec-1] o.s.web.servlet.DispatcherServlet        : Initializing Servlet 'dispatcherServlet'
+2026-09-24T14:36:24.823+08:00  INFO 24288 --- [guxian-mini-api] [0.0-8086-exec-1] o.s.web.servlet.DispatcherServlet        : Completed initialization in 1 ms
+2026-09-24T14:36:25.202+08:00  INFO 24288 --- [guxian-mini-api] [0.0-8086-exec-3] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-09-24T14:36:25.569+08:00  INFO 24288 --- [guxian-mini-api] [0.0-8086-exec-3] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection com.mysql.cj.jdbc.ConnectionImpl@ceac0ac
+2026-09-24T14:36:25.573+08:00  INFO 24288 --- [guxian-mini-api] [0.0-8086-exec-3] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <parent>
+        <groupId>com.guxian</groupId>
+        <artifactId>guxian-common</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+    <modelVersion>4.0.0</modelVersion>
+    <artifactId>guxian-common-mybatis</artifactId>
+    <name>MyBatisPlus公共配置、自动填充、分页插件</name>
+
+    <dependencies>
+            <!-- 依赖core，不带version -->
+            <dependency>
+                <groupId>com.guxian</groupId>
+                <artifactId>guxian-common-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!-- 依赖security，不带version（解决你红线报错） -->
+            <dependency>
+                <groupId>com.guxian</groupId>
+                <artifactId>guxian-common-security</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!-- mybatis-plus 版本取自父工程 properties，不写version -->
+            <dependency>
+                <groupId>com.baomidou</groupId>
+                <artifactId>mybatis-plus-boot-starter</artifactId>
+            </dependency>
+
+            <!-- mysql驱动 runtime范围 -->
+            <dependency>
+                <groupId>com.mysql</groupId>
+                <artifactId>mysql-connector-j</artifactId>
+                <scope>runtime</scope>
+            </dependency>
+        </dependencies>
+</project>

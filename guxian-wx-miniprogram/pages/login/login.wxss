@@ -1,0 +1,7 @@
+.login { padding: 80rpx 40rpx; background: #f5f7fa; min-height: 100vh; }
+.title { font-size: 48rpx; font-weight: bold; text-align: center; color: #1989fa; }
+.subtitle { font-size: 28rpx; text-align: center; color: #666; margin: 16rpx 0 60rpx; }
+.card { background: #fff; border-radius: 16rpx; padding: 40rpx; }
+.input { border: 1rpx solid #ddd; border-radius: 8rpx; padding: 20rpx; margin-bottom: 30rpx; }
+.btn { margin-top: 20rpx; }
+.tip { font-size: 22rpx; color: #999; text-align: center; margin-top: 30rpx; }

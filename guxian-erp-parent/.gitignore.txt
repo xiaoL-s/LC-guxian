@@ -1,0 +1,24 @@
+# Java后端
+target/
+*.class
+*.jar
+*.war
+*.log
+.idea/
+*.iml
+out/
+
+# Vue前端
+node_modules/
+dist/
+.vscode/
+npm-debug.log*
+yarn-debug.log*
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 本地环境配置（不要上传数据库密码、密钥）
+application-local.yml
+.env

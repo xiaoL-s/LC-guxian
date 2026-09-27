@@ -1,0 +1,99 @@
+server:
+  port: 8080
+spring:
+  application:
+    name: guxian-gateway
+  # 强制网关使用响应式环境，杜绝SpringMVC冲突
+  main:
+    web-application-type: reactive
+    allow-bean-definition-overriding: true
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 127.0.0.1:8848
+        # 本地调试关闭服务注册发现，不用启动Nacos
+        enabled: false
+      config:
+        server-addr: 127.0.0.1:8848
+        import-check:
+          enabled: false # 核心修复行
+    gateway:
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowed-origins: "*"
+            allowed-methods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - OPTIONS
+            allowed-headers: "*"
+            allow-credentials: false
+      routes:
+        # 说明：
+        #  1. 各服务自身已带模块前缀（/system、/customer、/sales），因此**不能**再配 StripPrefix，
+        #     否则会转发成 /login/doLogin 这类路径导致 404；
+        #  2. uri 端口必须与各服务 application.yml 的 server.port 一致：
+        #     system=8081、customer=8082、sales=8083；
+        #  3. 尚未实现的模块（供应商/采购/库存/生产/财务/报表/小程序）先占用规划端口，
+        #     服务未启动时该前缀会转发失败（Connection refused），属预期。
+        # 1.系统模块 system
+        - id: guxian-system
+          uri: http://127.0.0.1:8081
+          predicates:
+            - Path=/system/**
+
+        # 2.客户模块 customer
+        - id: guxian-customer
+          uri: http://127.0.0.1:8082
+          predicates:
+            - Path=/customer/**
+
+        # 3.销售订单模块 sales
+        - id: guxian-sales
+          uri: http://127.0.0.1:8083
+          predicates:
+            - Path=/sales/**
+
+        # 7.供应商模块 supplier（未实现）
+        - id: guxian-supplier
+          uri: http://127.0.0.1:8087
+          predicates:
+            - Path=/supplier/**
+
+        # 5.生产模块 produce（未实现）
+        - id: guxian-produce
+          uri: http://127.0.0.1:8085
+          predicates:
+            - Path=/produce/**
+
+        # 6.采购 purchase（未实现）
+        - id: guxian-purchase
+          uri: http://127.0.0.1:8086
+          predicates:
+            - Path=/purchase/**
+
+        # 4.库存 stock（未实现）
+        - id: guxian-stock
+          uri: http://127.0.0.1:8084
+          predicates:
+            - Path=/stock/**
+
+        # 8.财务 finance（未实现）
+        - id: guxian-finance
+          uri: http://127.0.0.1:8088
+          predicates:
+            - Path=/finance/**
+
+        # 9.报表 report（未实现）
+        - id: guxian-report
+          uri: http://127.0.0.1:8089
+          predicates:
+            - Path=/report/**
+
+        # 10.小程序 mini-api（未实现）
+        - id: guxian-mini-api
+          uri: http://127.0.0.1:8090
+          predicates:
+            - Path=/mini/**

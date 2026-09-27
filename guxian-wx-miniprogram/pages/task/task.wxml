@@ -1,0 +1,19 @@
+<view class="task">
+  <view class="head">
+    <text class="hello">你好，{{userInfo.realName || ''}}</text>
+    <text class="logout" bindtap="logout">退出</text>
+  </view>
+
+  <view class="stat-row">
+    <view class="stat"><text class="num">{{list.length}}</text><text class="lbl">在制工单</text></view>
+  </view>
+
+  <view class="card" wx:for="{{list}}" wx:key="workId" bindtap="openDetail" data-id="{{item.workId}}">
+    <view class="row"><text class="no">{{item.workNo}}</text><text class="tag {{item.workStatus}}">{{item.workStatusDesc}}</text></view>
+    <view class="row2">客户：{{item.customerName}}</view>
+    <view class="row2">总面积：{{item.totalArea}} ㎡</view>
+    <view class="row2">当前阶段：<text class="stage">{{item.currentStage || '生产中'}}</text></view>
+  </view>
+
+  <view wx:if="{{list.length===0}}" class="empty">暂无生产任务</view>
+</view>

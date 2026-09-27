@@ -1,0 +1,35 @@
+<view class="report">
+  <view class="scan-box" bindtap="scan">
+    <view class="scan-icon">⊞</view>
+    <view class="scan-text">扫工单二维码报工</view>
+  </view>
+
+  <block wx:if="{{detail.workNo}}">
+    <view class="card">
+      <view class="row"><text class="no">{{detail.workNo}}</text><text class="cust">{{detail.customerName}}</text></view>
+      <view class="row2">已完成工序：</view>
+      <view class="proc-list">
+        <text wx:for="{{detail.processList}}" wx:key="processId"
+              class="proc {{item.done?'done':''}}">{{item.processName}}{{item.done?' ✓':''}}</text>
+      </view>
+    </view>
+
+    <view class="card">
+      <view class="form-item">
+        <text class="lbl">工序</text>
+        <picker range="{{processNames}}" range-key="name" bindchange="onProcChange">
+          <view class="picker">{{processNames[procIndex].name || '请选择工序'}}</view>
+        </picker>
+      </view>
+      <view class="form-item">
+        <text class="lbl">合格数</text>
+        <input type="number" value="{{qualifiedNum}}" bindinput="onQ" class="input" />
+      </view>
+      <view class="form-item">
+        <text class="lbl">不良数</text>
+        <input type="number" value="{{badNum}}" bindinput="onB" class="input" />
+      </view>
+      <button type="primary" bindtap="submit" loading="{{loading}}">提交报工</button>
+    </view>
+  </block>
+</view>

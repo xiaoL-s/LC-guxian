@@ -1,0 +1,37 @@
+{
+  "name": "guxian-erp-screen",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --mode dev",
+    "test": "vite --mode test",
+    "prod": "vite --mode prod",
+    "build:dev": "vite build --mode dev",
+    "build:test": "vite build --mode test",
+    "build:prod": "vite build --mode prod",
+    "preview": "vite preview",
+    "lint": "eslint . --ext .vue,.ts --fix",
+    "lint:style": "stylelint src/**/*.{vue,scss} --fix",
+    "prepare": "husky install"
+  },
+  "dependencies": {
+    "@ant-design/icons-vue": "^7.0.1",
+    "axios": "^1.19.0",
+    "element-plus": "^2.14.4",
+    "js-cookie": "^3.0.8",
+    "pinia": "^4.0.2",
+    "vue": "^3.5.41",
+    "vue-router": "^4.6.4"
+  },
+  "devDependencies": {
+    "@types/js-cookie": "^3.0.6",
+    "@types/node": "^24.13.3",
+    "@vitejs/plugin-vue": "^6.0.8",
+    "@vue/tsconfig": "^0.9.1",
+    "sass-embedded": "^1.100.0",
+    "typescript": "~6.0.2",
+    "vite": "^8.2.0",
+    "vue-tsc": "^3.3.8"
+  }
+}

@@ -1,0 +1,10 @@
+<view class="login">
+  <view class="title">固贤纱窗厂</view>
+  <view class="subtitle">车间工人端</view>
+
+  <view class="card">
+    <input class="input" type="number" maxlength="11" placeholder="请输入手机号" bindinput="onPhone" value="{{phone}}" />
+    <button class="btn" type="primary" bindtap="login" loading="{{loading}}">登录</button>
+    <view class="tip">首次使用请联系管理员在系统里绑定手机号</view>
+  </view>
+</view>

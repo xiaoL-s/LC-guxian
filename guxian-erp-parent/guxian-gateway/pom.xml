@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <parent>
+        <groupId>com.guxian</groupId>
+        <artifactId>guxian-erp-parent</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+    <modelVersion>4.0.0</modelVersion>
+    <artifactId>guxian-gateway</artifactId>
+    <name>网关服务 Gateway</name>
+
+    <dependencies>
+        <!-- SpringCloud Gateway 注意：不要引入web starter -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-gateway</artifactId>
+        </dependency>
+        <!-- Nacos注册发现+配置中心 -->
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-config</artifactId>
+        </dependency>
+        <!-- 说明：网关是响应式(WebFlux)应用，**不依赖任何 servlet 版公共模块**：
+             guxian-common-core / guxian-common-security 会带入 spring-boot-starter-web、
+             spring-boot-starter-security 等 servlet 组件，导致
+             ① 启动时因缺少 jakarta.servlet.Filter 抛 NoClassDefFoundError；
+             ② Spring Security 默认链拦截所有请求（POST 报 "An expected CSRF token cannot be found"、其余 401）。
+             网关只做路由与跨域，鉴权由各业务服务的 JwtAuthInterceptor 负责。 -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>

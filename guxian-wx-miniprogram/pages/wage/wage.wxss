@@ -1,0 +1,6 @@
+.wage { padding: 20rpx; background: #f5f7fa; min-height: 100vh; }
+.total-card { background: linear-gradient(135deg,#1989fa,#4fc3f7); border-radius: 16rpx; padding: 50rpx; color: #fff; text-align: center; }
+.total-card .lbl { font-size: 26rpx; opacity: .9; }
+.total-card .num { font-size: 80rpx; font-weight: bold; margin: 16rpx 0; }
+.total-card .sub { font-size: 24rpx; opacity: .85; }
+.empty { text-align: center; color: #999; margin-top: 200rpx; }

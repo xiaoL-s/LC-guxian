@@ -1,0 +1,16 @@
+.report { padding: 20rpx; background: #f5f7fa; min-height: 100vh; }
+.scan-box { background: #fff; border: 2rpx dashed #1989fa; border-radius: 16rpx; padding: 60rpx 0; text-align: center; margin-bottom: 20rpx; }
+.scan-icon { font-size: 60rpx; color: #1989fa; }
+.scan-text { font-size: 28rpx; color: #1989fa; margin-top: 16rpx; }
+.card { background: #fff; border-radius: 12rpx; padding: 24rpx; margin-bottom: 16rpx; }
+.row { display: flex; justify-content: space-between; }
+.no { font-size: 30rpx; font-weight: bold; }
+.cust { color: #666; font-size: 26rpx; }
+.row2 { font-size: 26rpx; color: #333; margin-top: 16rpx; }
+.proc-list { display: flex; flex-wrap: wrap; margin-top: 10rpx; }
+.proc { font-size: 24rpx; padding: 6rpx 18rpx; background: #f0f0f0; border-radius: 20rpx; margin: 0 12rpx 12rpx 0; color: #666; }
+.proc.done { background: #e6f7e6; color: #52c41a; }
+.form-item { display: flex; align-items: center; margin-bottom: 24rpx; }
+.lbl { width: 140rpx; font-size: 28rpx; color: #333; }
+.input { flex: 1; border: 1rpx solid #ddd; border-radius: 8rpx; padding: 16rpx; }
+.picker { flex: 1; border: 1rpx solid #ddd; border-radius: 8rpx; padding: 16rpx; }

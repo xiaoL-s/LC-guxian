@@ -1,0 +1,26 @@
+{
+  "pages": [
+    "pages/login/login",
+    "pages/task/task",
+    "pages/report/report",
+    "pages/wage/wage"
+  ],
+  "window": {
+    "backgroundTextStyle": "light",
+    "navigationBarBackgroundColor": "#1989fa",
+    "navigationBarTitleText": "固贤纱窗厂",
+    "navigationBarTextStyle": "white"
+  },
+  "tabBar": {
+    "color": "#666",
+    "selectedColor": "#1989fa",
+    "backgroundColor": "#fff",
+    "list": [
+      { "pagePath": "pages/task/task", "text": "生产任务" },
+      { "pagePath": "pages/report/report", "text": "扫码报工" },
+      { "pagePath": "pages/wage/wage", "text": "我的工资" }
+    ]
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

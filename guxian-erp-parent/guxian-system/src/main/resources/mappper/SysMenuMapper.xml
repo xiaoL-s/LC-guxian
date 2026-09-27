@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!-- namespace 填你的Mapper接口全类名 -->
+<mapper namespace="com.guxian.system.mapper.SysMenuMapper">
+
+    <select id="getMenuByUserId" resultType="com.guxian.system.entity.SysMenu">
+        SELECT
+            u.*,
+            GROUP_CONCAT(DISTINCT m.menu_name SEPARATOR ',') AS menu_names
+        FROM sys_user u
+                 LEFT JOIN user_role ur ON u.id = ur.user_id
+                 LEFT JOIN role_menu rm ON ur.role_id = rm.role_id
+                 LEFT JOIN sys_menu m ON rm.menu_id = m.id
+        GROUP BY u.id
+    </select>
+
+
+</mapper>
