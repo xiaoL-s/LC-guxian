@@ -6,8 +6,8 @@
         <span style="font-weight:bold">字典类型</span>
         <el-button type="primary" size="small" @click="openAddType">新增</el-button>
       </div>
-      <el-input v-model="typeSearch" 
-        placeholder="输入类型名称搜索" 
+      <el-input v-model="typeSearch"
+        placeholder="输入类型名称搜索"
         size="small" style="margin-bottom:10px"
         @keyup.enter="loadDictType"
       />
@@ -33,12 +33,11 @@
         <span style="font-weight:bold">
           {{ currentDictType ? `字典项：${currentDictType.dictName}` : '请左侧选择字典类型' }}
         </span>
-        <!-- ========== 新增搜索区域（红框位置） ========== -->
         <div v-if="currentDictType" style="display:flex;gap:8px;align-items:center">
-          <el-input 
-            v-model="dataSearch" 
-            placeholder="输入标签名称搜索" 
-            size="small" 
+          <el-input
+            v-model="dataSearch"
+            placeholder="输入标签名称搜索"
+            size="small"
             style="width:220px"
             @keyup.enter="loadDictData"
           />
@@ -49,13 +48,20 @@
         <el-button v-else type="primary" size="small" @click="openAddData">新增字典项</el-button>
       </div>
       <el-table v-if="currentDictType" :data="dataTable" border stripe style="flex:1;overflow:auto;">
-        <el-table-column prop="id" label="ID"/>
-        <el-table-column prop="dictLabel" label="标签名称"/>
-        <el-table-column label="创建时间" prop="createTime"></el-table-column>
-        <el-table-column label="更新时间" prop="updateTime"></el-table-column>
-        <el-table-column label="操作">
+        <el-table-column prop="id" label="ID" width="70"/>
+        <el-table-column prop="dictLabel" label="标签名称" min-width="150"/>
+        <el-table-column prop="dictValue" label="字典值" width="90"/>
+        <el-table-column label="公式" width="100" align="center">
+          <template #default="scope">
+            <el-tag v-if="scope.row.formulaConfig" type="success" effect="plain" size="small">已配置</el-tag>
+            <span v-else class="dash">—</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="创建时间" prop="createTime" width="170"></el-table-column>
+        <el-table-column label="操作" width="190">
           <template #default="scope">
             <el-button text type="primary" @click="openEditData(scope.row)">编辑</el-button>
+            <el-button text type="success" @click="openFormula(scope.row)">公式</el-button>
             <el-button text type="danger" @click="delData(scope.row)">删除</el-button>
           </template>
         </el-table-column>
@@ -96,8 +102,8 @@
       </template>
     </el-dialog>
 
-    <!-- 弹窗：新增/编辑字典数据 -->
-    <el-dialog v-model="dataDialog.visible" title="字典项">
+    <!-- 弹窗：新增/编辑字典数据（基础信息） -->
+    <el-dialog v-model="dataDialog.visible" title="字典项" width="520px" :close-on-click-modal="false">
       <el-form :model="dataForm" label-width="100px">
         <el-form-item label="标签名称">
           <el-input v-model="dataForm.dictLabel"/>
@@ -108,26 +114,43 @@
         <el-form-item label="排序">
           <el-input v-model.number="dataForm.sort"/>
         </el-form-item>
+        <el-form-item v-if="dataForm.id">
+          <div class="formula-hint">
+            公式配置（下料/剪网/面积/金额）请在列表点「公式」按钮，用可视化界面编辑，工人直接看公式行，无需接触代码。
+          </div>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="dataDialog.visible=false">取消</el-button>
-        <el-button type="primary" @click="submitData">确定</el-button>
+        <el-button type="primary" @click="submitData">保存</el-button>
       </template>
+    </el-dialog>
+
+    <!-- 弹窗：可视化公式管理（仿产品详情页） -->
+    <el-dialog v-model="formulaDialog.visible" title="" width="94%" top="3vh"
+               :close-on-click-modal="false" destroy-on-close>
+      <DictFormulaManager
+        v-if="formulaDialog.visible"
+        :dict-item="formulaItem"
+        @close="formulaDialog.visible=false"
+        @saved="onFormulaSaved"
+      />
     </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { getDictTypePage, addDictType, updateDictType, delDictType, getDictTypeInfo,
          getDictDataPage, addDictData, updateDictData, delDictData, getDictDataInfo } from '@/api/system/dict'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import DictFormulaManager from './components/DictFormulaManager.vue'
 
 // ==========左侧字典类型==========
 const typeSearch = ref('')
 const typeList = ref<any[]>([])
 const selectedTypeId = ref<number|null>(null)
-let currentDictType:any = ref(null)
+const currentDictType = ref<any>(null)
 const typeDialog = reactive({ visible:false, isEdit:false })
 const typeForm = ref<any>({})
 
@@ -138,6 +161,10 @@ const dataTotal = ref(0)
 const dataPage = reactive({ pageNum:1, pageSize:10 })
 const dataDialog = reactive({ visible:false, isEdit:false })
 const dataForm = ref<any>({})
+
+// ==========可视化公式管理==========
+const formulaDialog = reactive({ visible:false })
+const formulaItem = ref<any>({})
 
 // 重置右侧搜索
 const resetDataSearch = ()=>{
@@ -161,10 +188,10 @@ const selectType = (row:any)=>{
   loadDictData()
 }
 
-//加载右侧字典数据【修改这个方法，带上搜索参数传给后端】
+//加载右侧字典数据【带上搜索参数传给后端】
 const loadDictData = async()=>{
   const res = await getDictDataPage({
-    ...dataPage, 
+    ...dataPage,
     dictType:currentDictType.value.dictType,
     dictLabel: dataSearch.value
   })
@@ -210,7 +237,7 @@ const delType = async(row:any)=>{
 //字典数据弹窗
 const openAddData = ()=>{
   dataDialog.isEdit = false
-  dataForm.value = {dictType:currentDictType.value.dictType, sort:0}
+  dataForm.value = {dictType:currentDictType.value?.dictType, sort:0}
   dataDialog.visible = true
 }
 const openEditData = async(row:any)=>{
@@ -245,6 +272,18 @@ const delData = async(row:any)=>{
   loadDictData()
 }
 
+// ========== 可视化公式管理 ==========
+/** 打开公式管理：需字典项已保存（有 id） */
+const openFormula = (row:any)=>{
+  formulaItem.value = { ...row }
+  formulaDialog.visible = true
+}
+/** 公式保存成功回调：刷新列表 */
+const onFormulaSaved = ()=>{
+  formulaDialog.visible = false
+  loadDictData()
+}
+
 onMounted(()=>loadDictType())
 </script>
 
@@ -260,5 +299,10 @@ onMounted(()=>loadDictType())
 }
 .type-item.active{
   background:#e6f7ff;
+}
+.dash{ color:#c0c4cc; }
+.formula-hint{
+  font-size:12px; color:#909399; line-height:1.7;
+  background:#f5f7fa; padding:8px 12px; border-radius:4px; width:100%;
 }
 </style>

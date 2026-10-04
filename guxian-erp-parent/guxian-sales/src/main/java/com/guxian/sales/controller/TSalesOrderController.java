@@ -66,12 +66,13 @@ public class TSalesOrderController {
 
     // ==================== 录入 ====================
 
-    /** 新增/编辑订单（保存为订单未受理） */
+    /** 新增/编辑订单（保存为订单未受理；新增自动拆单，返回工单生成提示） */
     @PostMapping("/save")
     @OperLog(operModule = "销售订单", operType = "保存", operContent = "新增/编辑销售订单")
-    public Result<Void> save(@RequestBody SalesOrderDTO dto) {
+    public Result<String> save(@RequestBody SalesOrderDTO dto) {
         orderService.saveOrder(dto);
-        return Result.success();
+        // 新增订单自动拆单：返回工单生成情况，前端按此提示（拆单失败不再静默）
+        return Result.success(orderService.checkWorkOrderTip(dto.getOrderId()));
     }
 
     // ==================== 状态流转 ====================
@@ -153,20 +154,11 @@ public class TSalesOrderController {
 
     // ==================== 删除 ====================
 
-    /** 删除订单（逻辑删除，仅未受理/已驳回/已取消可删） */
+    /** 删除订单（校验工单/业务流程后，先删明细再逻辑删订单） */
     @DeleteMapping("/{orderId}")
     @OperLog(operModule = "销售订单", operType = "删除", operContent = "删除销售订单")
     public Result<Void> remove(@PathVariable("orderId") Long orderId) {
-        TSalesOrder order = orderService.getById(orderId);
-        if (order == null) {
-            return Result.success();
-        }
-        // 已进入生产流程的订单不允许删除
-        if (order.getOrderStatus() != null
-                && order.getOrderStatus() >= 1 && order.getOrderStatus() <= 5) {
-            return Result.fail("订单已进入业务流程，不允许删除，可取消");
-        }
-        orderService.removeById(orderId);
+        orderService.deleteOrder(orderId);
         return Result.success();
     }
 }

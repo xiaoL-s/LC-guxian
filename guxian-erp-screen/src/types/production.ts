@@ -1,49 +1,5 @@
 // ===== 库存模块类型 =====
 
-export interface Material {
-  id?: number
-  materialCode: string
-  materialName: string
-  materialType: number
-  spec?: string
-  unit: string
-  stockNum: number
-  warnNum: number
-  shelfId?: number
-  enable: number
-  createTime?: string
-}
-
-export const MATERIAL_TYPES = [
-  { value: 1, label: '型材' },
-  { value: 2, label: '纱网' },
-  { value: 3, label: '五金配件' },
-  { value: 4, label: '辅材' }
-]
-
-export interface StockRecord {
-  id?: number
-  materialId: number
-  materialCode: string
-  materialName: string
-  bizType: number
-  inNum: number
-  outNum: number
-  afterNum: number
-  relateType?: string
-  relateNo?: string
-  remark?: string
-  createTime?: string
-}
-
-export const STOCK_BIZ_TYPES = [
-  { value: 1, label: '期初入库' },
-  { value: 2, label: '采购入库' },
-  { value: 3, label: '生产领料' },
-  { value: 4, label: '盘点调整' },
-  { value: 5, label: '退货出库' }
-]
-
 export interface Shelf {
   shelfId?: number
   shelfCode?: string
@@ -111,4 +67,39 @@ export interface ProductInstock {
   instockStatus: number
   instockTime?: string
   remark?: string
+}
+
+/** 生产工单明细（对应 t_work_order_item，开工时从订单明细复制） */
+export interface WorkOrderItem {
+  id?: number
+  workOrderId: number
+  salesOrderItemId?: number
+  subOrderNo?: string
+  productId?: number
+  productName?: string
+  itemCategory?: string
+  dictType?: string
+
+  color?: string
+  netMaterial?: string
+  handle?: string
+  handleDirection?: string
+  fixedBottom?: string
+  remark?: string
+
+  /** 客户下单总宽/总高 mm */
+  width?: number
+  height?: number
+  num?: number
+
+  // ============ 下料/剪网工艺尺寸(mm)：开工时从订单明细复制 ============
+  frameOutW?: number   // 外框下料宽
+  frameOutH?: number   // 外框下料高
+  frameInW?: number    // 内框下料宽
+  frameInH?: number    // 内框下料高
+  sashW?: number       // 内扇下料宽
+  sashH?: number       // 内扇下料高
+  netCutW?: number     // 剪网宽
+  netCutH?: number     // 剪网高
+  // ======================================================================
 }

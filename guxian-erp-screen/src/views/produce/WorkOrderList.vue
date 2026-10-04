@@ -105,29 +105,6 @@
             </el-table>
           </el-tab-pane>
 
-          <!-- 物料需求 -->
-          <el-tab-pane label="物料需求">
-            <el-table :data="detail.materialList" border stripe size="small">
-              <el-table-column label="物料编码" prop="materialCode" width="100" />
-              <el-table-column label="物料名称" prop="materialName" min-width="140" show-overflow-tooltip />
-              <el-table-column label="单位" prop="unit" width="60" align="center" />
-              <el-table-column label="需求数量" prop="requireNum" width="100" align="right" />
-              <el-table-column label="已领数量" prop="pickedNum" width="100" align="right" />
-              <el-table-column label="未领数量" width="100" align="right">
-                <template #default="s">{{ (Number(s.row.requireNum) - Number(s.row.pickedNum)).toFixed(3) }}</template>
-              </el-table-column>
-              <el-table-column label="操作" width="120">
-                <template #default="s">
-                  <el-button v-if="detail.workStatus !== 'FINISHED'" size="small" type="warning" link
-                    @click="openPick(s.row)">领料</el-button>
-                </template>
-              </el-table-column>
-            </el-table>
-            <div v-if="detail.workStatus !== 'FINISHED'" style="margin-top:8px;text-align:right">
-              <el-button size="small" type="warning" @click="pickAll">一键领齐</el-button>
-            </div>
-          </el-tab-pane>
-
           <!-- 工序报工 -->
           <el-tab-pane label="工序报工">
             <el-table :data="detail.processList" border stripe size="small">
@@ -142,13 +119,13 @@
               <el-table-column label="报工人" prop="operUsername" width="100" />
               <el-table-column label="操作" width="100">
                 <template #default="s">
-                  <el-button v-if="!s.row.done && detail.workStatus !== 'WAIT_PROCESS'" size="small" type="primary" link
+                  <el-button v-if="!s.row.done" size="small" type="primary" link
                     @click="openReport(s.row)">报工</el-button>
                 </template>
               </el-table-column>
             </el-table>
             <div v-if="detail.workStatus === 'WAIT_PROCESS'" style="margin-top:8px" class="tip-box">
-              提示：工单需先领料进入「生产中」才能报工。
+              提示：工单待生产，首次报工将自动进入「生产中」。
             </div>
           </el-tab-pane>
 
@@ -171,33 +148,9 @@
         <div style="margin-top:12px;text-align:right">
           <el-button size="small" type="primary" @click="onPrintCutting">打印生产单</el-button>
           <template v-if="detail.workStatus !== 'FINISHED'">
-            <el-button v-if="detail.workStatus === 'WAIT_PROCESS'" size="small" type="warning" @click="pickAll">先领料开工</el-button>
             <el-button size="small" type="success" @click="openFinish">完工入库</el-button>
           </template>
         </div>
-      </template>
-    </el-dialog>
-
-    <!-- 领料弹窗 -->
-    <el-dialog v-model="pickVisible" title="领料" width="440px" destroy-on-close>
-      <el-form label-width="90px" size="small">
-        <el-form-item label="物料">
-          <el-input :model-value="pickRow.materialName" disabled />
-        </el-form-item>
-        <el-form-item label="需求数量">
-          <el-input :model-value="pickRow.requireNum + ' ' + pickRow.unit" disabled />
-        </el-form-item>
-        <el-form-item label="已领数量">
-          <el-input :model-value="pickRow.pickedNum + ' ' + pickRow.unit" disabled />
-        </el-form-item>
-        <el-form-item label="本次领料" required>
-          <el-input-number v-model="pickNum" :min="0.001" :max="Number(pickRow.requireNum) - Number(pickRow.pickedNum)"
-            :precision="3" :controls="false" style="width:100%" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button size="small" @click="pickVisible = false">取消</el-button>
-        <el-button size="small" type="primary" @click="submitPick">确认领料</el-button>
       </template>
     </el-dialog>
 
@@ -253,7 +206,7 @@
 import { ref, reactive, computed } from 'vue'
 import {
   getWorkOrderPage, getAuditedOrders, splitWorkOrder, getWorkOrderDetail,
-  pickMaterials, reportProcess, finishInstock, getUsers
+  reportProcess, finishInstock, getUsers
 } from '@/api/production/workorder'
 import { getShelfEnabled } from '@/api/stock/material'
 import { WORK_STATUS, type WorkOrder } from '@/types/production'
@@ -321,7 +274,7 @@ const doSplit = async () => {
 
 // 详情
 const detailVisible = ref(false)
-const detail = reactive<any>({ orderItems: [], materialList: [], processList: [], reportList: [] })
+const detail = reactive<any>({ orderItems: [], processList: [], reportList: [] })
 // 当前生产阶段：开料∥剪网并行 -> 组装 -> 打包 -> 入库
 const currentStage = computed(() => {
   if (detail.workStatus === 'FINISHED') return '已完工入库'
@@ -332,7 +285,7 @@ const currentStage = computed(() => {
   if (done.has('ASSEMBLE')) return '已组装'
   if (cut && net) return '待组装（下料/剪网已完成）'
   if (cut || net) return `生产中（${cut ? '已下料' : '待下料'} / ${net ? '已剪网' : '待剪网'}）`
-  if (detail.workStatus === 'WAIT_PROCESS') return '待领料开工'
+  if (detail.workStatus === 'WAIT_PROCESS') return '待生产'
   return '生产中'
 })
 const viewDetail = async (row: any) => {
@@ -340,34 +293,11 @@ const viewDetail = async (row: any) => {
   if (res.code === 200) {
     Object.keys(detail).forEach(k => delete (detail as any)[k])
     Object.assign(detail, res.data, {
-      orderItems: res.data.orderItems || [], materialList: res.data.materialList || [],
+      orderItems: res.data.orderItems || [],
       processList: res.data.processList || [], reportList: res.data.reportList || []
     })
     detailVisible.value = true
   }
-}
-
-// 领料
-const pickVisible = ref(false)
-const pickRow = reactive<any>({})
-const pickNum = ref(1)
-const openPick = (row: any) => {
-  Object.assign(pickRow, row)
-  pickNum.value = Number(row.requireNum) - Number(row.pickedNum)
-  pickVisible.value = true
-}
-const submitPick = async () => {
-  if (!pickNum.value || pickNum.value <= 0) { ElMessage.warning('请输入领料数量'); return }
-  const res = await pickMaterials(detail.workId, [{ materialId: pickRow.materialId, pickNum: pickNum.value }])
-  if (res.code === 200) { ElMessage.success('领料成功'); pickVisible.value = false; viewDetail({ workId: detail.workId }) }
-}
-const pickAll = async () => {
-  const rows = detail.materialList.filter((m: any) => Number(m.requireNum) - Number(m.pickedNum) > 0)
-  if (!rows.length) { ElMessage.warning('无需领料'); return }
-  ElMessageBox.confirm(`确认一键领齐全部 ${rows.length} 项物料？`, '领料确认', { type: 'warning' }).then(async () => {
-    const res = await pickMaterials(detail.workId, rows.map((m: any) => ({ materialId: m.materialId, pickNum: Number(m.requireNum) - Number(m.pickedNum) })))
-    if (res.code === 200) { ElMessage.success('领料完成'); viewDetail({ workId: detail.workId }) }
-  }).catch(() => {})
 }
 
 // 报工

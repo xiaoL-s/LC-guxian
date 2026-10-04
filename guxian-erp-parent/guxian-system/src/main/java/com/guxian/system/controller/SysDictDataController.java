@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.guxian.annotation.OperLog;
+import com.guxian.system.dto.FormulaTestRequest;
 import com.guxian.system.entity.SysDictData;
 import com.guxian.result.Result;
 import com.guxian.system.service.SysDictDataService;
@@ -14,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.PathVariable;
 
 import jakarta.annotation.Resource;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/system/dict/data")
@@ -72,5 +74,13 @@ public class SysDictDataController {
     public Result<SysDictData> getInfo(@PathVariable("id") Long id) {
         SysDictData data = dictDataService.getById(id);
         return Result.success(data);
+    }
+
+    /**
+     * 产品公式测试：根据产品字典项公式配置 + 输入参数，计算下料/剪网/面积/金额
+     */
+    @PostMapping("/formula/test")
+    public Result<Map<String, Object>> formulaTest(@RequestBody FormulaTestRequest request) {
+        return dictDataService.formulaTest(request);
     }
 }

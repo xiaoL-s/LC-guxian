@@ -7,7 +7,7 @@ import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfi
 import org.springframework.context.annotation.Bean;
 import org.springframework.web.client.RestTemplate;
 
-@SpringBootApplication(exclude = {SecurityAutoConfiguration.class})
+@SpringBootApplication(scanBasePackages = "com.guxian", exclude = {SecurityAutoConfiguration.class})
 @MapperScan("com.guxian.mini.mapper")
 public class MiniApiApplication {
     public static void main(String[] args) {

@@ -13,8 +13,6 @@ export const splitWorkOrder = (salesOrderId: number, shelfId?: number, remark?: 
   request.post('/production/workorder/split', null, { params: { salesOrderId, shelfId, remark } })
 export const getWorkOrderPage = (params: any) => request.get('/production/workorder/page', { params })
 export const getWorkOrderDetail = (workId: number) => request.get(`/production/workorder/${workId}`)
-export const pickMaterials = (workId: number, pickList: any[]) =>
-  request.post('/production/workorder/pick', pickList, { params: { workId } })
 export const reportProcess = (data: any) => request.post('/production/workorder/report', data)
 export const finishInstock = (workId: number, shelfId?: number, remark?: string) =>
   request.post('/production/workorder/finish', null, { params: { workId, shelfId, remark } })

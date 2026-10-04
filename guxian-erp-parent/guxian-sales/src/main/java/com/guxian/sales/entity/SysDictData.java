@@ -36,6 +36,10 @@ public class SysDictData implements Serializable {
     /** 状态 1启用 0禁用 */
     private Integer status;
 
+    /** 产品公式配置JSON（型材/纱网/面积/金额），有公式的产品下单时自动计算下料/剪网/金额 */
+    @TableField("formula_config")
+    private String formulaConfig;
+
     @TableLogic
     @TableField("del_flag")
     private Integer delFlag;

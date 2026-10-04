@@ -55,15 +55,6 @@ public class TWorkOrderController {
         return Result.success(workOrderService.getDetail(workId));
     }
 
-    /** 领料 */
-    @OperLog(operModule = "生产工单", operContent = "工单领料")
-    @PostMapping("/pick")
-    public Result<Void> pick(@RequestParam("workId") Long workId,
-                             @RequestBody List<Map<String, Object>> pickList) {
-        workOrderService.pickMaterials(workId, pickList);
-        return Result.success();
-    }
-
     /** 工序报工 */
     @OperLog(operModule = "生产报工", operContent = "工序报工计件")
     @PostMapping("/report")

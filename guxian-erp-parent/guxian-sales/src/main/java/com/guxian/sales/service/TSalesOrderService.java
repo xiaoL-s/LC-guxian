@@ -59,4 +59,10 @@ public interface TSalesOrderService extends IService<TSalesOrder> {
 
     /** 字典下拉选项：产品(style_* 系列) + 颜色/网子/把手/锁具/加杆等属性 */
     Map<String, List<DictOptionVO>> dictOptions();
+
+    /** 保存后工单生成情况提示（新增订单自动拆单后调用；无工单时提示手动开工补齐） */
+    String checkWorkOrderTip(Long orderId);
+
+    /** 删除订单：校验工单/业务流程后，先删明细再逻辑删订单 */
+    void deleteOrder(Long orderId);
 }

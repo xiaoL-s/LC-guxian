@@ -33,11 +33,19 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 兜底捕获所有未知系统异常
+     * 兜底捕获所有未知系统异常。
+     * 返回精简后的异常信息（截断），便于前端定位问题、用户反馈，避免"系统繁忙"黑盒。
      */
     @ExceptionHandler(Exception.class)
     public Result<?> handleException(Exception e) {
         log.error("【系统未知异常】", e);
-        return Result.fail(ResultCodeEnum.FAIL.getCode(), "系统繁忙，请稍后重试");
+        String msg = e.getMessage();
+        if (msg == null || msg.isBlank()) {
+            msg = e.getClass().getSimpleName();
+        }
+        if (msg.length() > 120) {
+            msg = msg.substring(0, 120) + "...";
+        }
+        return Result.fail(ResultCodeEnum.FAIL.getCode(), "系统异常：" + msg);
     }
 }

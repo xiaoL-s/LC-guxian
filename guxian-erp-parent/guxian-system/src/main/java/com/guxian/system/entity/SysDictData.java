@@ -24,6 +24,9 @@ public class SysDictData implements Serializable {
     private String dictLabel;
     @TableField("dict_value")
     private String dictValue;
+    /** 产品公式配置（下料/剪网/面积/金额），可视化公式管理页编辑，JSON 格式存储 */
+    @TableField("formula_config")
+    private String formulaConfig;
     @TableField("sort")
     private Integer sort;
     @TableField("status")

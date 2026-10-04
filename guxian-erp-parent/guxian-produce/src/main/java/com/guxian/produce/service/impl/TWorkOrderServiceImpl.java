@@ -44,8 +44,6 @@ public class TWorkOrderServiceImpl extends ServiceImpl<TWorkOrderMapper, TWorkOr
     @Resource
     private SalesOrderReadMapper salesOrderReadMapper;
     @Resource
-    private TWorkOrderMaterialMapper workOrderMaterialMapper;
-    @Resource
     private TProcessDictMapper processDictMapper;
     @Resource
     private TWorkProcessRecordMapper processRecordMapper;
@@ -95,9 +93,11 @@ public class TWorkOrderServiceImpl extends ServiceImpl<TWorkOrderMapper, TWorkOr
             throw new BusinessException("订单无产品明细，无法拆单");
         }
 
-        // 创建工单
+        // 创建工单：工单号统一使用销售订单编号（下单保存即自动拆单，便于按订单追溯生产）
+        Object orderNoObj = header.get("orderNo");
+        String orderNo = orderNoObj == null ? null : orderNoObj.toString();
         TWorkOrder work = new TWorkOrder();
-        work.setWorkNo(generateWorkNo());
+        work.setWorkNo(StringUtils.hasText(orderNo) ? orderNo : generateWorkNo());
         work.setSalesOrderId(salesOrderId);
         work.setCustomerId(header.get("customerId") == null ? null : ((Number) header.get("customerId")).longValue());
         // 未指定货架时自动分配第一个启用货架（销售侧一键开工场景）
@@ -117,65 +117,6 @@ public class TWorkOrderServiceImpl extends ServiceImpl<TWorkOrderMapper, TWorkOr
         work.setIsRework(0);
         work.setRemark(remark);
         baseMapper.insert(work);
-
-        // ===== 拆单算料：明细行 × 产品BOM(按字典类型) 汇总物料需求 =====
-        Map<Long, Map<String, Object>> materialAgg = new LinkedHashMap<>(); // materialId -> 聚合行
-        for (Map<String, Object> item : items) {
-            String dictType = item.get("dictType") == null ? null : item.get("dictType").toString();
-            BigDecimal itemArea = item.get("itemTotalArea") == null ? BigDecimal.ZERO
-                    : new BigDecimal(item.get("itemTotalArea").toString());
-            int num = item.get("num") == null ? 1 : ((Number) item.get("num")).intValue();
-            List<Map<String, Object>> boms;
-            if (StringUtils.hasText(dictType)) {
-                boms = salesOrderReadMapper.selectBomByDictType(dictType);
-            } else {
-                // 兼容旧数据：product_id 维度
-                Object pid = item.get("productId");
-                if (pid == null) {
-                    continue;
-                }
-                boms = salesOrderReadMapper.selectBomByProductId(((Number) pid).longValue());
-            }
-            for (Map<String, Object> bom : boms) {
-                Long materialId = ((Number) bom.get("materialId")).longValue();
-                BigDecimal useNum = new BigDecimal(bom.get("useNum").toString());
-                BigDecimal lossRate = bom.get("lossRate") == null ? BigDecimal.ZERO
-                        : new BigDecimal(bom.get("lossRate").toString());
-                // 需求 = 面积(或数量) × 用量 × (1+损耗率)
-                BigDecimal base = itemArea.signum() > 0 ? itemArea : BigDecimal.valueOf(num);
-                BigDecimal req = base.multiply(useNum).multiply(BigDecimal.ONE.add(lossRate))
-                        .setScale(3, RoundingMode.HALF_UP);
-                Map<String, Object> agg = materialAgg.computeIfAbsent(materialId, k -> {
-                    Map<String, Object> m = new HashMap<>();
-                    m.put("materialId", materialId);
-                    m.put("requireNum", BigDecimal.ZERO);
-                    m.put("lossRate", lossRate);
-                    return m;
-                });
-                agg.put("requireNum", ((BigDecimal) agg.get("requireNum")).add(req));
-            }
-        }
-
-        // 落工单物料需求清单
-        for (Map.Entry<Long, Map<String, Object>> e : materialAgg.entrySet()) {
-            Long materialId = e.getKey();
-            Map<String, Object> m = e.getValue();
-            Map<String, Object> mat = salesOrderReadMapper.selectMaterial(materialId);
-            if (mat == null) {
-                continue;
-            }
-            TWorkOrderMaterial wm = new TWorkOrderMaterial();
-            wm.setWorkId(work.getWorkId());
-            wm.setMaterialId(materialId);
-            wm.setMaterialCode(mat.get("materialCode") == null ? "" : mat.get("materialCode").toString());
-            wm.setMaterialName(mat.get("materialName") == null ? "" : mat.get("materialName").toString());
-            wm.setUnit(mat.get("unit") == null ? "" : mat.get("unit").toString());
-            wm.setRequireNum((BigDecimal) m.get("requireNum"));
-            wm.setPickedNum(BigDecimal.ZERO);
-            wm.setCalcType(1);
-            wm.setLossRate((BigDecimal) m.get("lossRate"));
-            workOrderMaterialMapper.insert(wm);
-        }
 
         // 回写销售订单：状态=生产中，明细行=生产中 + 工单ID
         salesOrderReadMapper.updateOrderStatus(salesOrderId, ORDER_PRODUCING);
@@ -234,24 +175,6 @@ public class TWorkOrderServiceImpl extends ServiceImpl<TWorkOrderMapper, TWorkOr
         }
         // 订单明细
         vo.setOrderItems(salesOrderReadMapper.selectOrderItems(work.getSalesOrderId()));
-        // 物料需求
-        LambdaQueryWrapper<TWorkOrderMaterial> mw = new LambdaQueryWrapper<>();
-        mw.eq(TWorkOrderMaterial::getWorkId, workId).orderByAsc(TWorkOrderMaterial::getId);
-        List<TWorkOrderMaterial> mats = workOrderMaterialMapper.selectList(mw);
-        List<Map<String, Object>> matList = new ArrayList<>();
-        for (TWorkOrderMaterial m : mats) {
-            Map<String, Object> row = new HashMap<>();
-            row.put("id", m.getId());
-            row.put("materialId", m.getMaterialId());
-            row.put("materialCode", m.getMaterialCode());
-            row.put("materialName", m.getMaterialName());
-            row.put("unit", m.getUnit());
-            row.put("requireNum", m.getRequireNum());
-            row.put("pickedNum", m.getPickedNum());
-            row.put("lossRate", m.getLossRate());
-            matList.add(row);
-        }
-        vo.setMaterialList(matList);
         // 工序进度
         List<TProcessDict> processes = processDictMapper.selectList(new LambdaQueryWrapper<TProcessDict>()
                 .eq(TProcessDict::getStatus, 1).orderByAsc(TProcessDict::getProcessSort));
@@ -299,62 +222,6 @@ public class TWorkOrderServiceImpl extends ServiceImpl<TWorkOrderMapper, TWorkOr
     }
 
     // ==================================================================
-    // 领料：扣减库存
-    // ==================================================================
-
-    @Override
-    @Transactional(rollbackFor = Exception.class)
-    public void pickMaterials(Long workId, List<Map<String, Object>> pickList) {
-        TWorkOrder work = mustGet(workId);
-        if (STATUS_FINISHED.equals(work.getWorkStatus())) {
-            throw new BusinessException("工单已完工，不能领料");
-        }
-        if (pickList == null || pickList.isEmpty()) {
-            throw new BusinessException("领料明细不能为空");
-        }
-        for (Map<String, Object> pick : pickList) {
-            Long materialId = ((Number) pick.get("materialId")).longValue();
-            BigDecimal pickNum = new BigDecimal(pick.get("pickNum").toString());
-            if (pickNum.signum() <= 0) {
-                continue;
-            }
-            // 校验已领不超需求
-            LambdaQueryWrapper<TWorkOrderMaterial> w = new LambdaQueryWrapper<>();
-            w.eq(TWorkOrderMaterial::getWorkId, workId).eq(TWorkOrderMaterial::getMaterialId, materialId);
-            TWorkOrderMaterial wm = workOrderMaterialMapper.selectOne(w);
-            if (wm == null) {
-                throw new BusinessException("物料不在本工单需求清单中");
-            }
-            BigDecimal remain = wm.getRequireNum().subtract(nz(wm.getPickedNum()));
-            if (pickNum.compareTo(remain) > 0) {
-                throw new BusinessException("领料数量超过未领需求（剩余可领 " + remain + " " + wm.getUnit() + "）");
-            }
-            // 扣库存（库存流水）
-            Map<String, Object> mat = salesOrderReadMapper.selectMaterial(materialId);
-            BigDecimal stock = mat.get("stockNum") == null ? BigDecimal.ZERO : new BigDecimal(mat.get("stockNum").toString());
-            if (pickNum.compareTo(stock) > 0) {
-                throw new BusinessException("库存不足，当前 " + wm.getMaterialName() + " 库存 " + stock + " " + wm.getUnit());
-            }
-            salesOrderReadMapper.deductStock(materialId, pickNum);
-            // 库存流水留痕
-            salesOrderReadMapper.insertPickRecord(materialId, pickNum, work.getWorkNo(),
-                    "生产领料-" + work.getWorkNo(), UserContext.getUserId());
-            // 更新已领
-            TWorkOrderMaterial upd = new TWorkOrderMaterial();
-            upd.setId(wm.getId());
-            upd.setPickedNum(wm.getPickedNum().add(pickNum));
-            workOrderMaterialMapper.updateById(upd);
-        }
-        // 领料后进入生产
-        if (STATUS_WAIT.equals(work.getWorkStatus())) {
-            TWorkOrder upd = new TWorkOrder();
-            upd.setWorkId(workId);
-            upd.setWorkStatus(STATUS_PROCESSING);
-            baseMapper.updateById(upd);
-        }
-    }
-
-    // ==================================================================
     // 工序报工（计件）
     // ==================================================================
 
@@ -368,11 +235,15 @@ public class TWorkOrderServiceImpl extends ServiceImpl<TWorkOrderMapper, TWorkOr
             throw new BusinessException("请选择报工工人");
         }
         TWorkOrder work = mustGet(dto.getWorkId());
-        if (STATUS_WAIT.equals(work.getWorkStatus())) {
-            throw new BusinessException("工单未开工（需先领料）");
-        }
         if (STATUS_FINISHED.equals(work.getWorkStatus())) {
             throw new BusinessException("工单已完工，不能报工");
+        }
+        // 待生产状态的工单：首次报工自动转为生产中（无需领料）
+        if (STATUS_WAIT.equals(work.getWorkStatus())) {
+            TWorkOrder upd = new TWorkOrder();
+            upd.setWorkId(dto.getWorkId());
+            upd.setWorkStatus(STATUS_PROCESSING);
+            baseMapper.updateById(upd);
         }
         TProcessDict process = processDictMapper.selectById(dto.getProcessId());
         if (process == null || process.getStatus() == null || process.getStatus() != 1) {

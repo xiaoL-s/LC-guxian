@@ -53,11 +53,21 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
+@lombok.extern.slf4j.Slf4j
 public class TSalesOrderServiceImpl extends ServiceImpl<TSalesOrderMapper, TSalesOrder> implements TSalesOrderService {
 
     /** 平方毫米 -> 平方米 换算除数 */
     private static final BigDecimal MM2_TO_M2 = new BigDecimal("1000000");
+    /** 订单号前缀格式：yyyyMMdd（如 20261004），拼接 X + 4位序号 -> 20261004X0001 */
     private static final DateTimeFormatter ORDER_NO_FMT = DateTimeFormatter.ofPattern("yyyyMMdd");
+
+    /** 系统服务（公式计算）地址，可被配置覆盖 */
+    @org.springframework.beans.factory.annotation.Value("${guxian.system-url:http://127.0.0.1:8081}")
+    private String systemUrl;
+
+    /** JSON 序列化器（公式结果落库） */
+    private final com.fasterxml.jackson.databind.ObjectMapper objectMapper =
+            new com.fasterxml.jackson.databind.ObjectMapper();
 
     /** 产品字典类型前缀：字典管理中 style_xxx 的类型视为产品系列 */
     private static final String PRODUCT_DICT_PREFIX = "style";
@@ -72,6 +82,9 @@ public class TSalesOrderServiceImpl extends ServiceImpl<TSalesOrderMapper, TSale
     private TSalesOrderItemMapper orderItemMapper;
     @Resource
     private TProductMapper productMapper;
+    /** 只读访问生产工单表：编辑/删除前置校验 */
+    @Resource
+    private com.guxian.sales.mapper.WorkOrderCheckMapper workOrderCheckMapper;
     @Resource
     private SysDictTypeMapper dictTypeMapper;
     @Resource
@@ -213,15 +226,21 @@ public class TSalesOrderServiceImpl extends ServiceImpl<TSalesOrderMapper, TSale
         if (inList == null || inList.isEmpty()) {
             throw new BusinessException("请至少添加一条产品明细");
         }
+        boolean isEdit = dto.getOrderId() != null;
+        log.info("保存订单开始：orderId={}, isEdit={}, 客户={}, 明细行数={}",
+                dto.getOrderId(), isEdit, dto.getCustomerName(), inList.size());
 
         TSalesOrder order = new TSalesOrder();
         BeanUtils.copyProperties(dto, order);
 
-        boolean isEdit = dto.getOrderId() != null;
         if (isEdit) {
             TSalesOrder exist = baseMapper.selectById(dto.getOrderId());
             if (exist == null) {
                 throw new BusinessException("订单不存在，无法编辑");
+            }
+            // 已生成生产工单的订单禁止编辑（防止销售单与工单数据不一致，改动需作废重下）
+            if (workOrderCheckMapper.countBySalesOrderId(dto.getOrderId()) > 0) {
+                throw new BusinessException("该订单已生成生产工单，不允许修改，请作废后重新下单");
             }
             // 仅未受理、已驳回可编辑
             if (!OrderStatusEnum.PENDING_AUDIT.getCode().equals(exist.getOrderStatus())
@@ -277,6 +296,64 @@ public class TSalesOrderServiceImpl extends ServiceImpl<TSalesOrderMapper, TSale
             item.setMinArea(minArea);
             item.setNum(num);
 
+            // ================= 产品公式计算（下料/剪网/面积/金额） =================
+            // 产品来自字典且该字典项配置了公式时：以公式引擎计算结果为准，
+            // 型材=下料尺寸、纱网=剪网尺寸、面积/金额由公式输出，结果存 formula_result 供生产打印使用
+            boolean hasFormula = false;
+            if (StringUtils.hasText(in.getDictType()) && StringUtils.hasText(in.getDictValue())) {
+                SysDictData dict = dictDataMapper.selectOne(new LambdaQueryWrapper<SysDictData>()
+                        .eq(SysDictData::getDictType, in.getDictType())
+                        .eq(SysDictData::getDictValue, in.getDictValue())
+                        .last("LIMIT 1"));
+                if (dict != null && StringUtils.hasText(dict.getFormulaConfig())) {
+                    try {
+                        Map<String, Object> params = new LinkedHashMap<>();
+                        params.put("总宽", in.getWidth());
+                        params.put("总高", in.getHeight());
+                        params.put("数量", num);
+                        putIfText(params, "颜色", in.getColor());
+                        putIfText(params, "网子", in.getNetMaterial());
+                        putIfText(params, "把手", in.getHandle());
+                        putIfText(params, "把手方向", in.getHandleDirection());
+                        putIfText(params, "加杆", in.getAddRod());
+                        // 下固定：优先转数字（公式按“下固定>0/下固定=0”判断），转不了按 0 处理
+                        BigDecimal fbNum = parseNum(in.getFixedBottom());
+                        params.put("下固定", fbNum != null ? fbNum : BigDecimal.ZERO);
+                        params.put("单价", unitPrice);
+
+                        Map<String, Object> result = callFormulaCalc(
+                                in.getDictType(), in.getDictValue(), params);
+                        String formulaJson = objectMapper.writeValueAsString(result);
+                        item.setFormulaResult(formulaJson);
+                        // 公式结果日志：便于按订单号追溯下料/剪网数据是否正确
+                        log.info("公式计算成功：产品={}, 宽x高={}x{}, 数量={}, 结果={}",
+                                item.getProductName(), in.getWidth(), in.getHeight(), num,
+                                formulaJson.length() > 400 ? formulaJson.substring(0, 400) + "..." : formulaJson);
+
+                        // 公式输出的“面积”为整行总面积（已含数量）
+                        BigDecimal formulaArea = dec(result.get("面积"));
+                        if (formulaArea.signum() > 0) {
+                            BigDecimal perArea = formulaArea.divide(BigDecimal.valueOf(num), 4, RoundingMode.HALF_UP);
+                            item.setSingleArea(perArea);
+                            item.setChargeArea(perArea);
+                            item.setItemTotalArea(formulaArea.setScale(4, RoundingMode.HALF_UP));
+                        }
+                        // 公式输出的“总金额”为整行金额（已含数量与加价）
+                        BigDecimal formulaTotal = dec(result.get("总金额"));
+                        if (formulaTotal.signum() > 0) {
+                            item.setLineAmount(formulaTotal.setScale(2, RoundingMode.HALF_UP));
+                            item.setSalePriceType(3); // 按公式计价
+                        }
+                        hasFormula = true;
+                    } catch (BusinessException e) {
+                        // 公式计算是下料/剪网/金额的唯一来源，失败则直接阻断，避免生成无尺寸订单
+                        throw e;
+                    } catch (Exception e) {
+                        throw new BusinessException("产品【" + item.getProductName() + "】公式计算失败：" + e.getMessage());
+                    }
+                }
+            }
+
             // 扣宽：净宽 = 总宽 - 扣宽（不小于 0）
             BigDecimal deduct = nz(in.getDeductWidth());
             BigDecimal netWidth = in.getWidth().subtract(deduct);
@@ -286,34 +363,45 @@ public class TSalesOrderServiceImpl extends ServiceImpl<TSalesOrderMapper, TSale
             item.setDeductWidth(deduct);
             item.setNetWidth(netWidth);
 
-            // 单扇面积 = 净宽 * 高 / 1e6，保留4位
-            BigDecimal singleArea = netWidth.multiply(in.getHeight())
-                    .divide(MM2_TO_M2, 4, RoundingMode.HALF_UP);
-            item.setSingleArea(singleArea);
-            // 计费面积 = max(单扇面积, 最小起算方)
-            BigDecimal chargeArea = singleArea.max(minArea);
-            item.setChargeArea(chargeArea);
-            // 行总面积 = 计费面积 * 数量
-            BigDecimal itemTotalArea = chargeArea.multiply(BigDecimal.valueOf(num)).setScale(4, RoundingMode.HALF_UP);
-            item.setItemTotalArea(itemTotalArea);
+            // 行总面积 / 行金额：公式或无公式分支都会赋值，供下方汇总
+            BigDecimal itemTotalArea = BigDecimal.ZERO;
+            BigDecimal lineAmount = BigDecimal.ZERO;
 
-            // 计算方式：1按面积 2按件（默认按面积；产品主数据可覆盖）
-            Integer calcType = in.getCalcType();
-            if (calcType == null && product != null && product.getPriceType() != null) {
-                calcType = product.getPriceType();
+            if (!hasFormula) {
+                // ============ 无公式产品：走面积/件数通用计价 ============
+                // 单扇面积 = 净宽 * 高 / 1e6，保留4位
+                BigDecimal singleArea = netWidth.multiply(in.getHeight())
+                        .divide(MM2_TO_M2, 4, RoundingMode.HALF_UP);
+                item.setSingleArea(singleArea);
+                // 计费面积 = max(单扇面积, 最小起算方)
+                BigDecimal chargeArea = singleArea.max(minArea);
+                item.setChargeArea(chargeArea);
+                // 行总面积 = 计费面积 * 数量
+                itemTotalArea = chargeArea.multiply(BigDecimal.valueOf(num)).setScale(4, RoundingMode.HALF_UP);
+                item.setItemTotalArea(itemTotalArea);
+
+                // 计算方式：1按面积 2按件（默认按面积；产品主数据可覆盖）
+                Integer calcType = in.getCalcType();
+                if (calcType == null && product != null && product.getPriceType() != null) {
+                    calcType = product.getPriceType();
+                }
+                if (calcType == null) {
+                    calcType = 1;
+                }
+                item.setCalcType(calcType);
+                if (item.getSalePriceType() == null) {
+                    item.setSalePriceType(calcType);
+                }
+                lineAmount = calcType == 2
+                        ? unitPrice.multiply(BigDecimal.valueOf(num))
+                        : itemTotalArea.multiply(unitPrice);
+                lineAmount = lineAmount.setScale(2, RoundingMode.HALF_UP);
+                item.setLineAmount(lineAmount);
+            } else {
+                // 公式分支：金额/面积已在上面赋给 item，同步到汇总局部变量
+                itemTotalArea = nz(item.getItemTotalArea());
+                lineAmount = nz(item.getLineAmount());
             }
-            if (calcType == null) {
-                calcType = 1;
-            }
-            item.setCalcType(calcType);
-            if (item.getSalePriceType() == null) {
-                item.setSalePriceType(calcType);
-            }
-            BigDecimal lineAmount = calcType == 2
-                    ? unitPrice.multiply(BigDecimal.valueOf(num))
-                    : itemTotalArea.multiply(unitPrice);
-            lineAmount = lineAmount.setScale(2, RoundingMode.HALF_UP);
-            item.setLineAmount(lineAmount);
 
             item.setFreight(nz(item.getFreight()));
             item.setReceiveAmount(nz(item.getReceiveAmount()));
@@ -355,9 +443,9 @@ public class TSalesOrderServiceImpl extends ServiceImpl<TSalesOrderMapper, TSale
         }
 
         if (!isEdit) {
-            // 新增：生成订单号，状态未受理
+            // 新增：生成订单号，状态=已受理（保存后自动拆单生成生产工单）
             order.setOrderNo(generateOrderNo());
-            order.setOrderStatus(OrderStatusEnum.PENDING_AUDIT.getCode());
+            order.setOrderStatus(OrderStatusEnum.AUDITED.getCode());
             order.setReceiveAmount(BigDecimal.ZERO);
             order.setPaidAmount(BigDecimal.ZERO);
             order.setUnpaidAmount(order.getTotalAmount());
@@ -365,6 +453,8 @@ public class TSalesOrderServiceImpl extends ServiceImpl<TSalesOrderMapper, TSale
             order.setGrossProfitRate(rate(profitTotal, order.getTotalAmount()));
             order.setFinanceStatus(FinanceStatusEnum.UNPAID.getCode());
             baseMapper.insert(order);
+            // 回写新订单ID，供调用方（Controller）查询拆单结果提示
+            dto.setOrderId(order.getOrderId());
         } else {
             // 编辑：回到未受理，清空上次审核信息；保留已收款
             TSalesOrder old = baseMapper.selectById(dto.getOrderId());
@@ -396,6 +486,134 @@ public class TSalesOrderServiceImpl extends ServiceImpl<TSalesOrderMapper, TSale
             item.setSubOrderNo(buildSubOrderNo(order.getOrderNo(), seq++));
             orderItemMapper.insert(item);
         }
+
+        log.info("订单保存完成：orderNo={}, orderId={}, 明细数={}, 总面积={}, 总金额={}, 状态={}",
+                order.getOrderNo(), order.getOrderId(), entities.size(),
+                order.getTotalArea(), order.getTotalAmount(), order.getOrderStatus());
+
+        // ---------- 新增订单：事务提交后自动拆单生成生产工单（工单号=订单号） ----------
+        if (!isEdit) {
+            // 明细行状态与订单同步为已受理，保证拆单/生产侧数据一致
+            updateItemStatus(order.getOrderId(), OrderStatusEnum.AUDITED.getCode(), null);
+            final Long savedOrderId = order.getOrderId();
+            // 拆单由生产模块(8085)读同一数据库完成；必须在本地事务提交后再触发，
+            // 否则生产模块查不到尚未提交的订单/明细数据，导致拆单失败
+            org.springframework.transaction.support.TransactionSynchronizationManager
+                    .registerSynchronization(new org.springframework.transaction.support.TransactionSynchronization() {
+                        @Override
+                        public void afterCommit() {
+                            autoSplitOrder(savedOrderId);
+                        }
+                    });
+        }
+    }
+
+    /**
+     * 下单保存后自动调用生产模块拆单生成工单（工单号=订单编号）。
+     * 拆单失败（如生产服务未启动、货架未配置）不阻断下单：
+     * 订单保持"已受理"，可稍后在生产工单-拆单或订单列表"开工"手动补齐。
+     */
+    private void autoSplitOrder(Long orderId) {
+        String token = currentToken();
+        try {
+            HttpClient client = HttpClient.newBuilder()
+                    .connectTimeout(Duration.ofSeconds(5))
+                    .build();
+            HttpRequest.Builder rb = HttpRequest.newBuilder()
+                    .uri(URI.create("http://127.0.0.1:8085/production/workorder/split?salesOrderId=" + orderId))
+                    .timeout(Duration.ofSeconds(15))
+                    .POST(HttpRequest.BodyPublishers.noBody());
+            if (StringUtils.hasText(token)) {
+                rb.header("Authorization", token);
+            }
+            HttpResponse<String> resp = client.send(rb.build(), HttpResponse.BodyHandlers.ofString());
+            String body = resp.body();
+            if (resp.statusCode() == 200 && body != null && body.contains("\"code\":200")) {
+                String workNo = workOrderCheckMapper.latestWorkNo(orderId);
+                log.info("下单自动拆单成功：orderId={}，工单号={}（工单号=订单号）", orderId,
+                        workNo == null ? "" : workNo);
+            } else {
+                // 拆单失败：订单保持已受理，标记备注并打 error 日志，前端保存响应会提示手动开工补齐
+                String reason = body == null ? "响应为空" : body.substring(0, Math.min(200, body.length()));
+                log.error("下单自动拆单未成功：orderId={}, http={}, 响应={}", orderId, resp.statusCode(), reason);
+                markSplitFailed(orderId, "生产模块拆单未成功(HTTP " + resp.statusCode() + ")，请手动开工补齐");
+            }
+        } catch (Exception e) {
+            log.error("下单自动拆单异常：orderId={}", orderId, e);
+            markSplitFailed(orderId, "自动拆单异常：" + e.getMessage());
+        }
+    }
+
+    /** 拆单失败：在订单备注上追加标记，便于列表/详情中一眼识别需要手动处理 */
+    private void markSplitFailed(Long orderId, String reason) {
+        try {
+            TSalesOrder o = baseMapper.selectById(orderId);
+            if (o == null) {
+                return;
+            }
+            String mark = "【自动拆单失败】" + reason;
+            String oldRemark = o.getRemark();
+            if (oldRemark != null && oldRemark.contains("【自动拆单失败】")) {
+                return; // 已标记过，不重复追加
+            }
+            TSalesOrder upd = new TSalesOrder();
+            upd.setOrderId(orderId);
+            upd.setRemark(oldRemark == null || oldRemark.isBlank() ? mark : oldRemark + "；" + mark);
+            baseMapper.updateById(upd);
+        } catch (Exception ex) {
+            log.warn("拆单失败标记写入异常：orderId={}, msg={}", orderId, ex.getMessage());
+        }
+    }
+
+    @Override
+    public String checkWorkOrderTip(Long orderId) {
+        if (orderId == null) {
+            return "订单已保存；工单生成情况请到生产工单中确认";
+        }
+        String workNo = workOrderCheckMapper.latestWorkNo(orderId);
+        if (StringUtils.hasText(workNo)) {
+            return "订单已保存，已自动生成生产工单（工单号=" + workNo + "）";
+        }
+        return "订单已保存；生产工单未生成成功（生产服务可能未启动），请到订单列表手动开工补齐";
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void deleteOrder(Long orderId) {
+        TSalesOrder order = mustGet(orderId);
+        // 已生成生产工单的订单不允许删除（防止工单成为孤儿数据）
+        if (workOrderCheckMapper.countBySalesOrderId(orderId) > 0) {
+            throw new BusinessException("该订单已生成生产工单，不允许删除，请先在生产管理中处理");
+        }
+        // 已进入业务流程的订单不允许删除（受理1 ~ 已完成5 均含业务流转）
+        if (order.getOrderStatus() != null
+                && order.getOrderStatus() >= 1 && order.getOrderStatus() <= 5) {
+            throw new BusinessException("订单已进入业务流程，不允许删除，可取消");
+        }
+        // 先删明细（物理删除），再逻辑删除订单头，避免明细成为孤儿数据
+        LambdaQueryWrapper<TSalesOrderItem> dw = new LambdaQueryWrapper<>();
+        dw.eq(TSalesOrderItem::getOrderId, orderId);
+        orderItemMapper.delete(dw);
+        baseMapper.deleteById(orderId);
+        log.info("删除订单：orderId={}, orderNo={}（含其 {} 条明细）", orderId, order.getOrderNo(), 0);
+    }
+
+    /** 当前请求上下文中的 Authorization 头（供跨服务调用透传） */
+    private String currentToken() {
+        try {
+            var attrs = org.springframework.web.context.request.RequestContextHolder.getRequestAttributes();
+            if (attrs != null) {
+                jakarta.servlet.http.HttpServletRequest cur =
+                        ((org.springframework.web.context.request.ServletRequestAttributes) attrs).getRequest();
+                String auth = cur.getHeader("Authorization");
+                if (auth != null && !auth.isBlank()) {
+                    return auth;
+                }
+            }
+        } catch (Exception ignore) {
+            // 无请求上下文时返回空串，由生产模块鉴权提示
+        }
+        return "";
     }
 
     // ==================================================================
@@ -475,20 +693,7 @@ public class TSalesOrderServiceImpl extends ServiceImpl<TSalesOrderMapper, TSale
         // 真正的开工 = 调用生产模块拆单，生成生产工单（拆单成功会自动回写订单状态为生产中）
         try {
             // 透传当前登录用户的 token，生产模块拆单接口需要鉴权
-            String token = "";
-            try {
-                var attrs = org.springframework.web.context.request.RequestContextHolder.getRequestAttributes();
-                if (attrs != null) {
-                    jakarta.servlet.http.HttpServletRequest cur =
-                            ((org.springframework.web.context.request.ServletRequestAttributes) attrs).getRequest();
-                    String auth = cur.getHeader("Authorization");
-                    if (auth != null && !auth.isBlank()) {
-                        token = auth;
-                    }
-                }
-            } catch (Exception ignore) {
-                // 无请求上下文（如定时任务）时以空 token 调用，由生产模块鉴权提示
-            }
+            String token = currentToken();
             HttpClient client = HttpClient.newBuilder()
                     .connectTimeout(Duration.ofSeconds(5))
                     .build();
@@ -610,6 +815,7 @@ public class TSalesOrderServiceImpl extends ServiceImpl<TSalesOrderMapper, TSale
             DictOptionVO vo = new DictOptionVO(type, typeNameMap.get(type),
                     d.getDictValue(), d.getDictLabel(), d.getSort());
             if (type != null && type.startsWith(PRODUCT_DICT_PREFIX)) {
+                vo.setFormulaConfig(d.getFormulaConfig());
                 result.get("product").add(vo);
             } else if (result.containsKey(type)) {
                 result.get(type).add(vo);
@@ -816,23 +1022,99 @@ public class TSalesOrderServiceImpl extends ServiceImpl<TSalesOrderMapper, TSale
     }
 
     /**
-     * 订单号：SO + yyyyMMdd + 3位当天序号，如 SO20260919001
-     * 数据库 uk_order_no 唯一约束兜底，重试 3 次
+     * 订单号：yyyyMMdd + X + 4位序号，如 20261004X0001
+     * 序号按“年+月+日”前缀自增，跨日自动从 0001 重新开始
+     * 数据库 uk_order_no 唯一约束兜底
      */
     private synchronized String generateOrderNo() {
-        String prefix = "SO" + LocalDate.now().format(ORDER_NO_FMT);
+        String prefix = LocalDate.now().format(ORDER_NO_FMT) + "X";
         LambdaQueryWrapper<TSalesOrder> w = new LambdaQueryWrapper<>();
         w.likeRight(TSalesOrder::getOrderNo, prefix).orderByDesc(TSalesOrder::getOrderNo).last("LIMIT 1");
         TSalesOrder last = baseMapper.selectOne(w);
         int seq = 1;
-        if (last != null && last.getOrderNo() != null && last.getOrderNo().length() >= prefix.length()) {
+        if (last != null && last.getOrderNo() != null && last.getOrderNo().length() >= prefix.length() + 4) {
             try {
                 seq = Integer.parseInt(last.getOrderNo().substring(prefix.length())) + 1;
             } catch (NumberFormatException ignore) {
                 seq = 1;
             }
         }
-        return prefix + String.format("%03d", seq);
+        return prefix + String.format("%04d", seq);
+    }
+
+    /**
+     * 调用系统服务公式计算接口（下料/剪网/面积/金额）
+     * 透传当前登录用户 token，保证生产链路上的公式数据口径一致
+     */
+    private Map<String, Object> callFormulaCalc(String dictType, String dictValue, Map<String, Object> params) {
+        try {
+            String token = "";
+            try {
+                var attrs = org.springframework.web.context.request.RequestContextHolder.getRequestAttributes();
+                if (attrs != null) {
+                    jakarta.servlet.http.HttpServletRequest cur =
+                            ((org.springframework.web.context.request.ServletRequestAttributes) attrs).getRequest();
+                    String auth = cur.getHeader("Authorization");
+                    if (auth != null && !auth.isBlank()) {
+                        token = auth;
+                    }
+                }
+            } catch (Exception ignore) {
+                // 无请求上下文时以空 token 调用，由系统服务鉴权提示
+            }
+            HttpClient client = HttpClient.newBuilder()
+                    .connectTimeout(Duration.ofSeconds(5))
+                    .build();
+            HttpRequest.BodyPublisher body = HttpRequest.BodyPublishers.ofString(
+                    objectMapper.writeValueAsString(Map.of("dictType", dictType, "dictValue", dictValue, "params", params)),
+                    java.nio.charset.StandardCharsets.UTF_8);
+            HttpRequest.Builder rb = HttpRequest.newBuilder()
+                    .uri(URI.create(systemUrl + "/system/dict/data/formula/test"))
+                    .timeout(Duration.ofSeconds(10))
+                    .header("Content-Type", "application/json")
+                    .POST(body);
+            if (!token.isEmpty()) {
+                rb.header("Authorization", token);
+            }
+            HttpResponse<String> resp = client.send(rb.build(), HttpResponse.BodyHandlers.ofString());
+            if (resp.statusCode() != 200) {
+                throw new BusinessException("系统服务公式计算异常(HTTP " + resp.statusCode() + ")");
+            }
+            com.fasterxml.jackson.databind.JsonNode node = objectMapper.readTree(resp.body());
+            int code = node.path("code").asInt(-1);
+            if (code != 200) {
+                throw new BusinessException("系统服务公式计算失败：" + node.path("msg").asText("未知错误"));
+            }
+            com.fasterxml.jackson.databind.JsonNode data = node.path("data");
+            if (data.isMissingNode() || !data.isObject()) {
+                throw new BusinessException("系统服务公式计算无返回数据");
+            }
+            return objectMapper.convertValue(data, Map.class);
+        } catch (java.net.ConnectException e) {
+            throw new BusinessException("系统服务(8081)未启动，无法计算公式，请先启动 guxian-system 模块");
+        } catch (java.io.IOException | InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new BusinessException("调用系统服务公式计算失败：" + e.getMessage());
+        }
+    }
+
+    /** 参数非空才放入（空串/空白不参与公式条件判断） */
+    private void putIfText(Map<String, Object> map, String key, String val) {
+        if (StringUtils.hasText(val)) {
+            map.put(key, val.trim());
+        }
+    }
+
+    /** 字符串转数字（mm 类属性），转不了返回 null */
+    private BigDecimal parseNum(String s) {
+        if (!StringUtils.hasText(s)) {
+            return null;
+        }
+        try {
+            return new BigDecimal(s.trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     private SalesOrderDTO toListDTO(TSalesOrder order) {

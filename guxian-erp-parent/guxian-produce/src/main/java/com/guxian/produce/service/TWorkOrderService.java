@@ -16,15 +16,12 @@ public interface TWorkOrderService extends IService<TWorkOrder> {
     /** 待拆单的已审核销售订单 */
     List<Map<String, Object>> listAuditedOrders(String keyword);
 
-    /** 拆单生成工单：按订单明细×BOM算物料需求 */
+    /** 拆单生成工单 */
     Long splitOrderToWork(Long salesOrderId, Long shelfId, String remark);
 
     IPage<TWorkOrder> pageWork(Page<TWorkOrder> page, String keyword, String workStatus, Long customerId);
 
     WorkOrderDetailVO getDetail(Long workId);
-
-    /** 工单领料（扣减库存，一次领一个工单全部或部分） */
-    void pickMaterials(Long workId, List<Map<String, Object>> pickList);
 
     /** 工序报工（计件） */
     void reportProcess(WorkReportDTO dto);

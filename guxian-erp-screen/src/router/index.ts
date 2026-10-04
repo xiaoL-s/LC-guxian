@@ -149,14 +149,10 @@ const routes = [
     path: '/stock',
     name: 'StockIndex',
     component: () => import('@/views/system/SystemIndex.vue'),
-    redirect: '/stock/material',
+    redirect: '/stock/shelf',
     meta: { title: '库存管理', icon: 'Stock' },
     children: [
-      { path: 'material', name: 'MaterialList', component: () => import('@/views/stock/MaterialList.vue'), meta: { title: '物料档案', icon: '' } },
-      { path: 'shelf', name: 'ShelfList', component: () => import('@/views/stock/ShelfList.vue'), meta: { title: '库位货架管理', icon: '' } },
-      { path: 'bill', name: 'BillList', component: () => import('@/views/stock/BillList.vue'), meta: { title: '出入库单据', icon: '' } },
-      { path: 'check', name: 'CheckList', component: () => import('@/views/stock/CheckList.vue'), meta: { title: '库存盘点', icon: '' } },
-      { path: 'warn', name: 'WarnList', component: () => import('@/views/stock/WarnList.vue'), meta: { title: '库存预警', icon: '' } }
+      { path: 'shelf', name: 'ShelfList', component: () => import('@/views/stock/ShelfList.vue'), meta: { title: '库位货架管理', icon: '' } }
     ]
   },
   // ============ 生产管理 ============

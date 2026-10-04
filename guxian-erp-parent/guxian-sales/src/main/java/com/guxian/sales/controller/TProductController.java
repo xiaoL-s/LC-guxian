@@ -4,8 +4,6 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.guxian.annotation.OperLog;
 import com.guxian.result.Result;
-import com.guxian.sales.dto.MaterialOptionDTO;
-import com.guxian.sales.dto.ProductBomDTO;
 import com.guxian.sales.dto.TProductDTO;
 import com.guxian.sales.entity.TProduct;
 import com.guxian.sales.service.TProductService;
@@ -15,7 +13,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 /**
- * 产品档案 + 产品BOM配置
+ * 产品档案
  */
 @RestController
 @RequestMapping("/sales/product")
@@ -61,25 +59,5 @@ public class TProductController {
     @GetMapping("/listEnabled")
     public Result<List<TProduct>> listEnabled() {
         return Result.success(productService.listEnabled());
-    }
-
-    /** 查询产品BOM（含物料信息） */
-    @GetMapping("/bom/{productId}")
-    public Result<List<ProductBomDTO>> bom(@PathVariable("productId") Long productId) {
-        return Result.success(productService.listBom(productId));
-    }
-
-    /** 保存产品BOM（整单覆盖） */
-    @PostMapping("/bom/save/{productId}")
-    @OperLog(operModule = "产品BOM", operType = "保存", operContent = "配置产品BOM物料清单")
-    public Result<Void> saveBom(@PathVariable("productId") Long productId, @RequestBody List<ProductBomDTO> bomList) {
-        productService.saveBom(productId, bomList);
-        return Result.success();
-    }
-
-    /** 全部启用物料下拉（BOM配置选物料） */
-    @GetMapping("/materials")
-    public Result<List<MaterialOptionDTO>> materials() {
-        return Result.success(productService.listMaterials());
     }
 }

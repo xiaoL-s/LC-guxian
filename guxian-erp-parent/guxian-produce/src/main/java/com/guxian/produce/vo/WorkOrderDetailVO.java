@@ -39,9 +39,6 @@ public class WorkOrderDetailVO {
     /** 订单明细行（只读） */
     private List<Map<String, Object>> orderItems;
 
-    /** 物料需求清单 */
-    private List<Map<String, Object>> materialList;
-
     /** 工序进度（含是否已完成） */
     private List<Map<String, Object>> processList;
 

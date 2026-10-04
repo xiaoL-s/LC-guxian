@@ -8,7 +8,7 @@
         </el-form-item>
         <el-form-item label="分类">
           <el-select v-model="search.productType" placeholder="全部分类" clearable style="width:140px">
-            <el-option v-for="t in PRODUCT_TYPES" :key="t" :label="t" :value="t" />
+            <el-option v-for="t in dictTypeOptions" :key="t.value" :label="t.label" :value="t.value" />
           </el-select>
         </el-form-item>
         <el-form-item>
@@ -38,10 +38,9 @@
             <el-tag :type="s.row.status === 1 ? 'success' : 'info'" size="small">{{ s.row.status === 1 ? '启用' : '停用' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" width="150" fixed="right">
           <template #default="s">
             <el-button size="small" type="primary" link @click="openProduct(s.row)">编辑</el-button>
-            <el-button size="small" type="warning" link @click="openBom(s.row)">配置BOM</el-button>
             <el-button size="small" type="danger" link @click="onDelete(s.row)">删除</el-button>
           </template>
         </el-table-column>
@@ -57,15 +56,19 @@
       <el-form ref="productFormRef" :model="form" :rules="rules" label-width="92px" size="small">
         <el-row :gutter="12">
           <el-col :span="12">
-            <el-form-item label="产品编码" prop="productCode"><el-input v-model="form.productCode" /></el-form-item>
+            <el-form-item label="产品编码" prop="productCode"><el-input v-model="form.productCode" disabled /></el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="产品名称" prop="productName"><el-input v-model="form.productName" /></el-form-item>
+            <el-form-item label="产品名称" prop="productName">
+              <el-select v-model="form.productName" placeholder="请选择产品" style="width:100%" filterable>
+                <el-option v-for="n in dictNameOptions" :key="n.value" :label="n.label" :value="n.value" />
+              </el-select>
+            </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="产品分类">
               <el-select v-model="form.productType" placeholder="请选择" style="width:100%">
-                <el-option v-for="t in PRODUCT_TYPES" :key="t" :label="t" :value="t" />
+                <el-option v-for="t in dictTypeOptions" :key="t.value" :label="t.label" :value="t.value" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -90,10 +93,18 @@
             <el-form-item label="起算方㎡"><el-input-number v-model="form.minArea" :min="0" :precision="4" :controls="false" style="width:100%" /></el-form-item>
           </el-col>
           <el-col :span="8">
-            <el-form-item label="默认颜色"><el-input v-model="form.defaultColor" /></el-form-item>
+            <el-form-item label="默认颜色">
+              <el-select v-model="form.defaultColor" placeholder="颜色" style="width:100%">
+                <el-option v-for="c in dictColorOptions" :key="c.value" :label="c.label" :value="c.value" />
+              </el-select>
+            </el-form-item>
           </el-col>
           <el-col :span="8">
-            <el-form-item label="默认材质"><el-input v-model="form.defaultMaterial" /></el-form-item>
+            <el-form-item label="默认材质">
+              <el-select v-model="form.defaultMaterial" placeholder="纱网" style="width:100%">
+                <el-option v-for="n in dictNetOptions" :key="n.value" :label="n.label" :value="n.value" />
+              </el-select>
+            </el-form-item>
           </el-col>
           <el-col :span="8">
             <el-form-item label="开启方向"><el-input v-model="form.openDirection" /></el-form-item>
@@ -115,43 +126,47 @@
         <el-button size="small" type="primary" @click="submitProduct">保存</el-button>
       </template>
     </el-dialog>
-
-    <!-- BOM配置弹窗 -->
-    <el-dialog v-model="bomVisible" :title="`配置BOM - ${bomProduct?.productName ?? ''}`" width="860px" destroy-on-close>
-      <el-alert title="单位用量指每㎡（或每件）产品所需物料数量；需求量 = 用量 × 订单面积 × (1+损耗率)" type="info" :closable="false" style="margin-bottom:10px" />
-      <el-table :data="bomList" border size="small">
-        <el-table-column label="物料" min-width="240">
-          <template #default="s">
-            <el-select v-model="s.row.materialId" filterable placeholder="选择物料" size="small" style="width:100%" @change="(v)=>onMaterialChange(s.row,v)">
-              <el-option v-for="m in materialOptions" :key="m.id" :label="`${m.materialCode} ${m.materialName}${m.spec?'/'+m.spec:''}`" :value="m.id" />
-            </el-select>
-          </template>
-        </el-table-column>
-        <el-table-column label="单位" prop="unit" width="60" align="center" />
-        <el-table-column label="单位用量" width="130">
-          <template #default="s"><el-input-number v-model="s.row.useNum" :min="0" :precision="3" :controls="false" size="small" style="width:100%" /></template>
-        </el-table-column>
-        <el-table-column label="损耗率" width="120">
-          <template #default="s"><el-input-number v-model="s.row.lossRate" :min="0" :max="1" :step="0.01" :precision="2" :controls="false" size="small" style="width:100%" /></template>
-        </el-table-column>
-        <el-table-column label="操作" width="70" align="center">
-          <template #default="s"><el-button size="small" type="danger" link @click="bomList.splice(s.$index,1)">移除</el-button></template>
-        </el-table-column>
-      </el-table>
-      <el-button size="small" type="primary" plain style="margin-top:10px" @click="addBomRow">+ 添加物料</el-button>
-      <template #footer>
-        <el-button size="small" @click="bomVisible = false">取消</el-button>
-        <el-button size="small" type="primary" @click="submitBom">保存BOM</el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
-import { getProductPage, saveProduct, delProduct, getProductBom, saveProductBom, listMaterials } from '@/api/sales/product'
-import { PRODUCT_TYPES, type TProduct, type ProductBom, type MaterialOption } from '@/types/sales'
+import { ref, reactive, onMounted, watch } from 'vue'
+import { getProductPage, saveProduct, delProduct } from '@/api/sales/product'
+import type { TProduct } from '@/types/sales'
+import { getDictDataPage, getDictTypePage } from '@/api/system/dict'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
+
+// 字典选项
+const dictTypeOptions = ref<{label:string,value:string}[]>([])  // 产品分类（sys_dict_type）
+const dictNameOptions = ref<{label:string,value:string}[]>([])  // 产品名称（sys_dict_data，随分类联动）
+const dictColorOptions = ref<{label:string,value:string}[]>([])
+const dictNetOptions = ref<{label:string,value:string}[]>([])
+
+// 加载所有字典类型作为产品分类
+const loadDictTypes = async () => {
+  const res: any = await getDictTypePage({ pageNum: 1, pageSize: 200 })
+  dictTypeOptions.value = (res.data?.records || [])
+    .filter((t: any) => t.status === 1)
+    .map((t: any) => ({ label: t.dictName, value: t.dictType, code: t.dictType }))
+}
+// 根据选中的分类编码，加载该分类下的产品名称
+const loadNamesByType = async (dictType: string) => {
+  if (!dictType) { dictNameOptions.value = []; return }
+  const res: any = await getDictDataPage({ pageNum: 1, pageSize: 200, dictType })
+  dictNameOptions.value = (res.data?.records || [])
+    .filter((d: any) => d.status === 1)
+    .map((d: any) => ({ label: d.dictLabel, value: d.dictLabel }))
+}
+// 加载颜色/纱网
+const loadSimpleDict = async (dictType: string) => {
+  const res: any = await getDictDataPage({ pageNum: 1, pageSize: 200, dictType })
+  return (res.data?.records || []).map((d: any) => ({ label: d.dictLabel, value: d.dictLabel }))
+}
+onMounted(async () => {
+  await loadDictTypes()
+  dictColorOptions.value = await loadSimpleDict('product_color')
+  dictNetOptions.value = await loadSimpleDict('net_material')
+})
 
 const loading = ref(false)
 const tableData = ref<TProduct[]>([])
@@ -175,14 +190,31 @@ const productVisible = ref(false)
 const productFormRef = ref<FormInstance>()
 const blankForm = (): TProduct => ({ productCode: '', productName: '', productType: '', spec: '', unit: '㎡', unitPrice: 0, priceType: 1, minArea: 0, defaultColor: '', defaultMaterial: '', openDirection: '', status: 1, remark: '' })
 const form = reactive<TProduct>(blankForm())
+// 分类联动：切换分类时清空产品名称并重新加载
+watch(() => form.productType, (newType) => {
+  form.productName = ''
+  loadNamesByType(newType || '')
+})
 const rules = {
   productCode: [{ required: true, message: '请输入编码', trigger: 'blur' }],
   productName: [{ required: true, message: '请输入名称', trigger: 'blur' }]
 }
-const openProduct = (row?: TProduct) => {
+const openProduct = async (row?: TProduct) => {
   productFormRef.value?.clearValidate()
   Object.assign(form, blankForm())
-  if (row) Object.assign(form, row)
+  if (row) {
+    Object.assign(form, row)
+  } else {
+    // 自动生成编码 gx001 递增
+    const res: any = await getProductPage({ pageNum: 1, pageSize: 200, productName: '' })
+    const records: any[] = res.data?.records || []
+    const maxNum = records
+      .map(r => /^gx(\d+)$/.exec(r.productCode || ''))
+      .filter(Boolean)
+      .map(m => parseInt(m![1]))
+      .reduce((a, b) => Math.max(a, b), 0)
+    form.productCode = 'gx' + String(maxNum + 1).padStart(3, '0')
+  }
   productVisible.value = true
 }
 const submitProduct = async () => {
@@ -197,37 +229,6 @@ const onDelete = (row: TProduct) => {
     await delProduct(row.productId!)
     ElMessage.success('删除成功'); loadTable()
   }).catch(() => {})
-}
-
-// BOM弹窗
-const bomVisible = ref(false)
-const bomProduct = ref<TProduct | null>(null)
-const bomList = ref<ProductBom[]>([])
-const materialOptions = ref<MaterialOption[]>([])
-const openBom = async (row: TProduct) => {
-  bomProduct.value = row
-  bomList.value = []
-  if (materialOptions.value.length === 0) {
-    const m = await listMaterials()
-    if (m.code === 200) materialOptions.value = m.data
-  }
-  const res = await getProductBom(row.productId!)
-  if (res.code === 200) bomList.value = res.data || []
-  if (bomList.value.length === 0) addBomRow()
-  bomVisible.value = true
-}
-const addBomRow = () => bomList.value.push({ materialId: undefined, useNum: 1, lossRate: 0.05, unit: '' })
-const onMaterialChange = (r: ProductBom, id: number) => {
-  const m = materialOptions.value.find(x => x.id === id)
-  if (m) { r.materialName = m.materialName; r.materialCode = m.materialCode; r.spec = m.spec; r.unit = m.unit }
-}
-const submitBom = async () => {
-  const valid = bomList.value.filter(b => b.materialId)
-  if (valid.length === 0) { ElMessage.warning('请至少选择一种物料'); return }
-  valid.forEach((b, i) => b.sort = i + 1)
-  await saveProductBom(bomProduct.value!.productId!, valid)
-  ElMessage.success('BOM保存成功')
-  bomVisible.value = false
 }
 </script>
 

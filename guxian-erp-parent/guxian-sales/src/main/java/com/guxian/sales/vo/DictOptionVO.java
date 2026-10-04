@@ -17,6 +17,8 @@ public class DictOptionVO {
     private String label;
     /** 排序 */
     private Integer sort;
+    /** 产品公式配置（产品字典项携带，前端据此渲染属性下拉与默认值） */
+    private String formulaConfig;
 
     public DictOptionVO() {
     }

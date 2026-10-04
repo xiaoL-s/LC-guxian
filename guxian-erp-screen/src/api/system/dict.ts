@@ -33,3 +33,7 @@ export function delDictData(id: number) {
 export function getDictDataInfo(id: number) {
   return request({ url: `/system/dict/data/${id}`, method: 'get' })
 }
+//产品公式测试（字典项公式配置 + 输入参数 → 下料/剪网/面积/金额）
+export function testDictFormula(data: any) {
+  return request({ url: '/system/dict/data/formula/test', method: 'post', data })
+}

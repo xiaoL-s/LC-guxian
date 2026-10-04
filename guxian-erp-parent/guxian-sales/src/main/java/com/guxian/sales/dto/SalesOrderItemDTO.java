@@ -23,6 +23,10 @@ public class SalesOrderItemDTO {
     private String itemCategory;
     /** 产品字典类型 */
     private String dictType;
+    /** 产品字典值/编码（如 1） */
+    private String dictValue;
+    /** 公式计算结果JSON（后端按产品公式计算，回显用） */
+    private String formulaResult;
 
     private String color;
     private String material;

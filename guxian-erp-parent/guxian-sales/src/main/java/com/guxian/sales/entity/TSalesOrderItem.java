@@ -42,6 +42,12 @@ public class TSalesOrderItem implements Serializable {
     /** 产品来源字典类型（如 style_8k_sanjie） */
     private String dictType;
 
+    /** 产品字典值/编码（如 1），配合 dictType 定位字典项与公式配置 */
+    private String dictValue;
+
+    /** 公式计算结果JSON（型材下料/纱网剪网/面积/金额），下单保存时按产品公式自动计算 */
+    private String formulaResult;
+
     /** 颜色 */
     private String color;
 

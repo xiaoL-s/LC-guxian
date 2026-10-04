@@ -29,7 +29,7 @@
         <!-- 全局公共依赖 -->
         <dependency>
             <groupId>com.guxian</groupId>
-            <artifactId>guxian-common</artifactId>
+            <artifactId>guxian-common-core</artifactId>
             <version>${project.version}</version>
         </dependency>
         <!-- OpenAPI文档 -->

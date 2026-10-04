@@ -112,10 +112,10 @@ const handleLogout = ()=>{
 }
 .content {
   flex: 1;
-  padding: 20px;
+  padding: var(--gx-pad);
   overflow: auto;
   background: #fff;
-  margin: 16px;
+  margin: calc(var(--gx-pad) - 4px);
   border-radius: 14px;
   box-shadow: 0 2px 12px rgba(0,0,0,0.04);
 }

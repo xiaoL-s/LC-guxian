@@ -3,7 +3,7 @@
     <template v-for="item in menuList" :key="item.id">
       <div class="menu-item">
         <!-- 收缩状态禁止展开子菜单 !isCollapse -->
-        <div class="menu-title" @click="!isCollapse && toggleExpand(item)">
+        <div class="menu-title" @click="!isCollapse && onMenuClick(item)">
           <component
             v-if="item.icon"
             :is="iconMap[item.icon]"
@@ -42,6 +42,7 @@
 
 <script setup lang="ts">
 import { defineProps } from 'vue'
+import { useRouter } from 'vue-router'
 // 导入antd图标
 import {
   HomeOutlined,
@@ -56,6 +57,9 @@ import {
   BarChartOutlined,
   WechatOutlined
 } from '@ant-design/icons-vue'
+
+// 图标映射：数据库icon字段和key严格一致
+const router = useRouter()
 
 // 图标映射：数据库icon字段和key严格一致
 const iconMap: Record<string, any> = {
@@ -81,12 +85,21 @@ const toggleExpand = (item: any) => {
   item._expand = !item._expand
 }
 
+/** 顶级菜单点击：有子菜单则展开/收起；无子菜单直接跳转 */
+const onMenuClick = (item: any) => {
+  if (item.children && item.children.length > 0) {
+    toggleExpand(item)
+  } else if (item.path) {
+    router.push(item.path)
+  }
+}
+
 console.log("iconMap keys：", Object.keys(iconMap))
 </script>
 
 <style scoped lang="scss">
 .sidebar {
-  width: 180px;
+  width: var(--gx-sidebar-w, 180px);
   height: 100vh;
   padding: 20px 12px;
   box-sizing: border-box;

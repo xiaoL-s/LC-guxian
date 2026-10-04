@@ -17,30 +17,6 @@ export interface TProduct {
   createTime?: string
 }
 
-// 物料下拉
-export interface MaterialOption {
-  id: number
-  materialCode: string
-  materialName: string
-  spec?: string
-  unit?: string
-  materialType?: number
-}
-
-// 产品BOM行
-export interface ProductBom {
-  id?: number
-  productId?: number
-  materialId?: number
-  materialCode?: string
-  materialName?: string
-  spec?: string
-  unit?: string
-  useNum?: number
-  lossRate?: number
-  sort?: number
-}
-
 // 字典下拉选项（产品来自字典管理 style_* 系列）
 export interface DictOption {
   dictType: string
@@ -48,6 +24,8 @@ export interface DictOption {
   value: string
   label: string
   sort?: number
+  /** 产品公式配置（含产品属性 vars 数据列表/默认值），仅产品字典项携带 */
+  formulaConfig?: string
 }
 
 /** 字典选项集合：product 为产品系列汇总，其余为属性字典（可能为空数组） */
@@ -128,6 +106,17 @@ export interface SalesOrderItem {
   flowStatus?: string
   produceProgress?: number
   workOrderId?: number
+
+  // ============ 下料/剪网工艺尺寸(mm)：下单时按产品工艺参数算好存库 ============
+  frameOutW?: number   // 外框下料宽
+  frameOutH?: number   // 外框下料高
+  frameInW?: number    // 内框下料宽
+  frameInH?: number    // 内框下料高
+  sashW?: number       // 内扇下料宽
+  sashH?: number       // 内扇下料高
+  netCutW?: number     // 剪网宽
+  netCutH?: number     // 剪网高
+  // ======================================================================
 
   remark?: string
 }
