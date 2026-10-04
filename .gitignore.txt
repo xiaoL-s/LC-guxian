@@ -9,3 +9,6 @@ application-dev.yml
 # node前端（vue）
 node_modules/
 dist/
+# 删除临时python调试脚本
+*.py
+
