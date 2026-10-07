@@ -1,0 +1,60 @@
+# ===================== Java / Maven 编译产物 =====================
+**/target/
+*.class
+*.jar
+hs_err_pid*
+
+# ===================== 前端 Node =====================
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# ===================== IDE 个人文件 =====================
+.idea/
+.vscode/
+*.iml
+*.iws
+*.swp
+
+# ===================== 日志与输出 =====================
+*.log
+logs/
+*.tmp
+.tmp_dbg/
+.tmp_err/
+
+# ===================== 本地敏感配置（含账号密码，禁止上传） =====================
+**/application-dev.yml
+**/application-local.yml
+**/application-test.yml
+.env.local
+.env.*.local
+
+# ===================== 调试脚本 / 临时数据（本地验算用，不入库） =====================
+*.ps1
+*.py
+*.pyc
+lg.json
+formula_test.json
+style_sanjie.json
+init_products.sql
+init_products2.sql
+sql_print_template.sql
+_fc9.sql
+_fc9.json
+f1.json
+f2.json
+resp_tmp.json
+menus.json
+demo.txt
+_sales_log.txt
+bom_empty.png
+dict_data.png
+dict_type.png
+screenshot_bom.png
+temp_*.png
+
+# ===================== 系统 / 编辑器 =====================
+.DS_Store
+Thumbs.db

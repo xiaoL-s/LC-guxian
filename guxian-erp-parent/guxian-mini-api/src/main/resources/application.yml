@@ -1,4 +1,4 @@
-server:
+﻿server:
   port: 8086
   address: 0.0.0.0
 
@@ -8,8 +8,8 @@ spring:
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://127.0.0.1:3306/guxian-erp?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
-    username: root
-    password: root
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:root}
 
 # 业务服务直连地址 + JWT配置（合并到一个 guxian 节点）
 guxian:
@@ -18,7 +18,7 @@ guxian:
   system:
     base-url: http://127.0.0.1:8081
   jwt:
-    secret: GuxianErpSecretKey20260801SecretKeyLong123456789
+    secret: ${JWT_SECRET:GuxianErpSecretKey20260801SecretKeyLong123456789}
     expire-hours: 720
 
 mybatis-plus:

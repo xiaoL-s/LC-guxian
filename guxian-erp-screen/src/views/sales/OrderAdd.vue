@@ -152,12 +152,11 @@
         </div>
       </template>
 
-      <el-table ref="itemTableRef" :data="order.itemList" border size="small" height="420"
-        :header-cell-style="{ background: '#f5f7fa', fontSize: '12px', padding: '3px 0' }"
-        :cell-style="{ padding: '1px 0' }" @selection-change="onSelectionChange" @row-click="onRowClick">
-        <el-table-column type="selection" width="38" align="center" />
-        <el-table-column type="index" label="#" width="40" align="center" />
-        <el-table-column label="产品" width="190">
+      <el-table ref="itemTableRef" :data="order.itemList" border size="small" height="460"
+        :header-cell-style="headerCellStyle"
+        :cell-style="{ padding: '1px 2px' }" @row-click="onRowClick">
+        <!-- 冻结左侧：产品 / 品目 -->
+        <el-table-column label="产品" width="180" fixed="left" show-overflow-tooltip>
           <template #default="s">
             <el-select v-model="s.row.productKey" filterable clearable placeholder="选择产品" size="small"
               style="width: 100%" @change="(v: string) => onProductChange(s.row, v)">
@@ -167,82 +166,77 @@
             </el-select>
           </template>
         </el-table-column>
-        <el-table-column label="品目" width="112">
+        <el-table-column label="品目" width="100" fixed="left">
           <template #default="s"><span class="cell-text">{{ s.row.itemCategory || '—' }}</span></template>
         </el-table-column>
-        <el-table-column v-for="col in attrCols" :key="col.prop" :label="col.label" :width="col.width">
-          <template #default="s">
-            <el-select v-model="s.row[col.prop]" filterable allow-create default-first-option clearable size="small"
-              placeholder="" style="width: 100%">
-              <el-option v-for="o in attrOptions(s.row, col)" :key="o.value + '-' + o.label" :label="o.label" :value="o.label" />
-            </el-select>
-          </template>
+
+        <!-- ① 尺寸组：总高 / 总宽 / 下固定 -->
+        <el-table-column label="尺寸(mm)">
+          <el-table-column label="总高" width="82">
+            <template #default="s">
+              <el-input-number v-model="s.row.height" :min="0" :controls="false" size="small" style="width: 100%" @change="() => calcRow(s.row)" />
+            </template>
+          </el-table-column>
+          <el-table-column label="总宽" width="82">
+            <template #default="s">
+              <el-input-number v-model="s.row.width" :min="0" :controls="false" size="small" style="width: 100%" @change="() => calcRow(s.row)" />
+            </template>
+          </el-table-column>
+          <el-table-column label="下固定" width="92">
+            <template #default="s">
+              <el-select v-model="s.row.fixedBottom" filterable allow-create default-first-option clearable size="small" placeholder="" style="width: 100%">
+                <el-option v-for="o in attrOptions(s.row, { prop: 'fixedBottom', dictKey: 'fixed_bottom' })" :key="o.value + '-' + o.label" :label="o.label" :value="o.label" />
+              </el-select>
+            </template>
+          </el-table-column>
         </el-table-column>
 
-        <el-table-column label="总宽mm" width="86">
-          <template #default="s">
-            <el-input-number v-model="s.row.width" :min="0" :controls="false" size="small" style="width: 100%" @change="() => calcRow(s.row)" />
-          </template>
-        </el-table-column>
-        <el-table-column label="总高mm" width="86">
-          <template #default="s">
-            <el-input-number v-model="s.row.height" :min="0" :controls="false" size="small" style="width: 100%" @change="() => calcRow(s.row)" />
-          </template>
-        </el-table-column>
-        <el-table-column label="扣宽" width="76">
-          <template #default="s">
-            <el-input-number v-model="s.row.deductWidth" :min="0" :controls="false" size="small" style="width: 100%" @change="() => calcRow(s.row)" />
-          </template>
-        </el-table-column>
-        <el-table-column label="净宽" width="72" align="right">
-          <template #default="s">{{ num(s.row.netWidth) }}</template>
-        </el-table-column>
-        <el-table-column label="数量" width="72">
+        <el-table-column label="数量" width="70">
           <template #default="s">
             <el-input-number v-model="s.row.num" :min="1" :controls="false" size="small" style="width: 100%" @change="() => calcRow(s.row)" />
           </template>
         </el-table-column>
-        <el-table-column label="单位" width="70">
-          <template #default="s"><el-input v-model="s.row.unit" size="small" /></template>
+
+        <!-- ② 产品属性组：颜色 / 网子 / 把手 / 把手方向 / 开向 / 加杆 -->
+        <el-table-column label="产品属性">
+          <el-table-column v-for="col in attrColsMain" :key="col.prop" :label="col.label" :width="col.width">
+            <template #default="s">
+              <el-select v-model="s.row[col.prop]" filterable allow-create default-first-option clearable size="small"
+                placeholder="" style="width: 100%">
+                <el-option v-for="o in attrOptions(s.row, col)" :key="o.value + '-' + o.label" :label="o.label" :value="o.label" />
+              </el-select>
+            </template>
+          </el-table-column>
         </el-table-column>
-        <el-table-column label="单价" width="88">
-          <template #default="s">
-            <el-input-number v-model="s.row.unitPrice" :min="0" :precision="2" :controls="false" size="small"
-              style="width: 100%" @change="() => calcRow(s.row)" />
-          </template>
+
+        <!-- ③ 金额组：单价 / 面积 / 计算方式 / 实收金额 -->
+        <el-table-column label="金额">
+          <el-table-column label="单价" width="86">
+            <template #default="s">
+              <el-input-number v-model="s.row.unitPrice" :min="0" :precision="2" :controls="false" size="small"
+                style="width: 100%" @change="() => calcRow(s.row)" />
+            </template>
+          </el-table-column>
+          <el-table-column label="面积㎡" width="76" align="right">
+            <template #default="s">{{ num(s.row.itemTotalArea) }}</template>
+          </el-table-column>
+          <el-table-column label="计算方式" width="92">
+            <template #default="s">
+              <el-select v-model="s.row.calcType" size="small" style="width: 100%" @change="() => calcRow(s.row)">
+                <el-option label="按面积" :value="1" />
+                <el-option label="按件" :value="2" />
+              </el-select>
+            </template>
+          </el-table-column>
+          <el-table-column label="实收金额" width="88" align="right">
+            <template #default="s">{{ money(s.row.receiveAmount ?? 0) }}</template>
+          </el-table-column>
         </el-table-column>
-        <el-table-column label="计算方式" width="94">
-          <template #default="s">
-            <el-select v-model="s.row.calcType" size="small" style="width: 100%" @change="() => calcRow(s.row)">
-              <el-option label="按面积" :value="1" />
-              <el-option label="按件" :value="2" />
-            </el-select>
-          </template>
-        </el-table-column>
-        <el-table-column label="面积㎡" width="82" align="right">
-          <template #default="s">{{ num(s.row.itemTotalArea) }}</template>
-        </el-table-column>
-        <el-table-column label="金额" width="92" align="right">
-          <template #default="s"><b>{{ money(s.row.lineAmount) }}</b></template>
-        </el-table-column>
-        <el-table-column label="利润" width="86">
-          <template #default="s">
-            <el-input-number v-model="s.row.profitAmount" :precision="2" :controls="false" size="small" style="width: 100%" />
-          </template>
-        </el-table-column>
-        <el-table-column label="销售商" width="100">
-          <template #default="s"><el-input v-model="s.row.salesOwner" size="small" /></template>
-        </el-table-column>
-        <el-table-column label="公式" width="66" align="center">
-          <template #default="s">
-            <el-button size="small" type="success" link :disabled="!s.row.dictType || !s.row.dictValue"
-              @click.stop="openFormula(s.row)">公式</el-button>
-          </template>
-        </el-table-column>
-        <el-table-column label="备注" min-width="120">
+
+        <el-table-column label="备注" min-width="130">
           <template #default="s"><el-input v-model="s.row.remark" size="small" /></template>
         </el-table-column>
-        <el-table-column label="操作" width="132" fixed="right" align="center">
+        <el-table-column label="操作" width="128" fixed="right" align="center">
           <template #default="s">
             <el-button size="small" type="primary" link @click.stop="insertProduct(s.$index)">插入</el-button>
             <el-button size="small" type="primary" link @click.stop="copyRow(s.$index)">复制</el-button>
@@ -250,6 +244,7 @@
           </template>
         </el-table-column>
       </el-table>
+      <div class="scroll-tip">↔ 列较多，可横向拖动滚动条查看全部列</div>
 
       <el-alert type="info" :closable="false" style="margin-top: 8px"
         title="宽高单位毫米(mm)；净宽 = 总宽 − 扣宽；单扇面积 = 净宽 × 总高 ÷ 1000000；行金额 = 面积 × 单价（按件时 = 单价 × 数量）。保存时后端按产品字典与上述口径强制复核。" />
@@ -390,6 +385,19 @@ const attrCols = [
   { prop: 'fixedBottom', label: '下固定', width: 96, dictKey: 'fixed_bottom' },
   { prop: 'squareBoard', label: '方板', width: 96, dictKey: 'square_board' }
 ]
+
+/** 属性组渲染列：仅保留下单常用 6 个属性（颜色/网子/把手/把手方向/开向/加杆）；
+ *  下固定已单独放在"尺寸"组展示；材质/锁具/方板等未启用列从表格移除（字段仍随单保存） */
+const attrColsMain = attrCols.filter(c => ['color', 'netMaterial', 'handle', 'handleDirection', 'openDirection', 'addRod'].includes(c.prop))
+
+/** 分组表头样式：分组父列（有子列）用浅蓝底区分，普通列灰底 */
+const headerCellStyle = ({ column }: any) => {
+  const base = { background: '#f5f7fa', fontSize: '12px', padding: '3px 2px', fontWeight: 600, color: '#303133' }
+  if (column.children && column.children.length) {
+    return { ...base, background: '#e9f0fb', color: '#1f4e9c' }
+  }
+  return base
+}
 
 const orderTypeOptions = computed(() => dict.order_type.length ? dict.order_type.map(o => o.label) : ORDER_TYPES)
 const installTypeOptions = computed(() => dict.install_type.length ? dict.install_type.map(o => o.label) : INSTALL_TYPES)
@@ -747,6 +755,7 @@ onMounted(async () => {
 .block-title { font-weight: bold; font-size: 14px; }
 .detail-tools { display: flex; gap: 6px; }
 .cell-text { font-size: 12px; color: #606266; }
+.scroll-tip { margin-top: 6px; font-size: 12px; color: #909399; text-align: center; }
 .sum-box { border: 1px solid #ebeef5; border-radius: 4px; padding: 8px 14px; background: #fafafa; }
 .sum-row { display: flex; justify-content: space-between; line-height: 26px; font-size: 13px; }
 .sum-total { border-top: 1px dashed #dcdfe6; margin-top: 4px; padding-top: 4px; font-size: 15px; }
