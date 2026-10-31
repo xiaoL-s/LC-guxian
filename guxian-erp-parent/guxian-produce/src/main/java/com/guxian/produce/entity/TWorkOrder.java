@@ -25,6 +25,10 @@ public class TWorkOrder {
     /** 客户ID */
     private Long customerId;
 
+    /** 客户名称（列表查询冗余填充，非表字段） */
+    @TableField(exist = false)
+    private String customerName;
+
     /** 预分配入库货架ID */
     private Long shelfId;
 
@@ -57,4 +61,8 @@ public class TWorkOrder {
     @TableLogic
     @TableField("del_flag")
     private Integer delFlag;
+
+    /** 非表字段：工单订单产品名汇总（列表展示用，逗号分隔） */
+    @TableField(exist = false)
+    private String productNames;
 }

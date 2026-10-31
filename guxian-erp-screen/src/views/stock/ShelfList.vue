@@ -3,7 +3,7 @@
     <el-card shadow="never" class="table-card">
       <template #header>
         <div class="card-head">
-          <span class="block-title">库位货架管理</span>
+          <span class="block-title">库位货架</span>
           <el-button size="small" type="primary" @click="openAdd">新增货架</el-button>
         </div>
       </template>
@@ -50,6 +50,7 @@
 </template>
 
 <script setup lang="ts">
+defineOptions({ name: 'ShelfList' })
 import { ref } from 'vue'
 import { getShelfList, saveShelf, delShelf } from '@/api/stock/material'
 import type { Shelf } from '@/types/production'

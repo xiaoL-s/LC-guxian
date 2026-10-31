@@ -24,6 +24,10 @@ export function getOrderInfo(orderId: number) {
 export function saveOrder(data: any) {
   return request({ url: '/sales/order/save', method: 'post', data })
 }
+// 批量打印订单（打印即开工：拆单生成工单 + 标记已打印 + 订单状态=生产中）
+export function printOrders(orderIds: number[]) {
+  return request({ url: '/sales/order/print', method: 'post', data: orderIds })
+}
 // 受理通过
 export function auditPassOrder(orderId: number) {
   return request({ url: `/sales/order/audit/pass/${orderId}`, method: 'put' })
@@ -63,4 +67,12 @@ export function settleOrder(orderId: number) {
 // 删除
 export function delOrder(orderId: number) {
   return request({ url: `/sales/order/${orderId}`, method: 'delete' })
+}
+// 订单备注列表（工作人员备注，按时间倒序）
+export function getOrderRemarkList(orderId: number) {
+  return request({ url: '/sales/order/remark/list', method: 'get', params: { orderId } })
+}
+// 新增工作人员备注
+export function saveOrderRemark(data: { orderId: number; remark: string }) {
+  return request({ url: '/sales/order/remark/save', method: 'post', data })
 }

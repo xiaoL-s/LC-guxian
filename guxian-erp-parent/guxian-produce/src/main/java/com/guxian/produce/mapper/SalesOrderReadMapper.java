@@ -64,6 +64,14 @@ public interface SalesOrderReadMapper {
     @Select("SELECT IFNULL(SUM(num),0) AS totalNum FROM t_sales_order_item WHERE order_id = #{orderId}")
     Map<String, Object> selectOrderItemNum(@Param("orderId") Long orderId);
 
+    /** 按明细行ID查产品与数量（多产品报工时取单行数量上限与计价产品） */
+    @Select("SELECT item_id AS itemId, product_name AS productName, num FROM t_sales_order_item WHERE item_id = #{itemId}")
+    Map<String, Object> selectOrderItemById(@Param("itemId") Long itemId);
+
+    /** 追加订单备注（报工流水：某员工：时间：工序） */
+    @Update("UPDATE t_sales_order SET remark = CONCAT(IFNULL(remark,''), #{line}), update_time = NOW() WHERE order_id = #{orderId}")
+    int appendOrderRemark(@Param("orderId") Long orderId, @Param("line") String line);
+
     /** 用户真实姓名 */
     @Select("SELECT real_name AS realName FROM sys_user WHERE id = #{userId}")
     Map<String, Object> selectUserName(@Param("userId") Long userId);

@@ -23,8 +23,17 @@ public interface TWorkOrderService extends IService<TWorkOrder> {
 
     WorkOrderDetailVO getDetail(Long workId);
 
+    /** 扫码报工信息：工单号/客户/订单数量上限/已报数量（小程序扫码后展示与校验） */
+    Map<String, Object> scanInfo(Long workId);
+
     /** 工序报工（计件） */
     void reportProcess(WorkReportDTO dto);
+
+    /** 撤回报工（仅超级管理员）：撤销指定产品行指定工序的报工记录与流水 */
+    void revokeReport(Long workId, Long itemId, Long processId);
+
+    /** 撤回完工入库（仅超级管理员）：删除入库单，工单回生产中，订单回生产中 */
+    void revokeFinish(Long workId);
 
     /** 完工入库：生成成品入库单 + 回写销售订单已完工 */
     TProductInstock finishAndInstock(Long workId, Long shelfId, String remark);

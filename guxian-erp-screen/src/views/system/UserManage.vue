@@ -17,21 +17,21 @@
     </el-card>
 
     <!-- 表格 -->
-    <el-card style="margin-top:16px">
+    <el-card style="margin-top:10px">
       <el-table :data="tableData" border stripe ref="tableRef"
         @selection-change="handleSelectionChange"
       >
         <el-table-column type="selection" width="55"></el-table-column>
         <el-table-column label="ID" prop="id" width="80"></el-table-column>
-        <el-table-column label="用户名" prop="username"></el-table-column>
-        <el-table-column label="姓名" prop="realName"></el-table-column>
-        <el-table-column label="手机号" prop="phone"></el-table-column>
-        <el-table-column label="职位" prop="roleNames"></el-table-column>
-<el-table-column label="菜单权限" prop="menuNames" min-width="180">
+        <el-table-column label="用户名" prop="username" width="110"></el-table-column>
+        <el-table-column label="姓名" prop="realName" width="100"></el-table-column>
+        <el-table-column label="手机号" prop="phone" width="130"></el-table-column>
+        <el-table-column label="职位" prop="roleNames" min-width="90"></el-table-column>
+<el-table-column label="菜单权限" prop="menuNames" min-width="220" show-overflow-tooltip>
   <template #default="scope">
-    <el-tooltip :content="scope.row.menuNames" effect="dark" placement="top">
-      <span class="text-ellipsis" style="display:inline-block;width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-        {{ scope.row.menuNames || '无' }}
+    <el-tooltip :content="scope.row.menuNames || '无'" effect="dark" placement="top">
+      <span style="display:inline-block;width:100%;white-space:normal;word-break:break-all;">
+        {{ showMenus(scope.row.menuNames) }}
       </span>
     </el-tooltip>
   </template>
@@ -39,15 +39,15 @@
 
 
 
-        <el-table-column label="状态" prop="status">
+        <el-table-column label="状态" prop="status" width="80">
           <template #default="scope">
             <el-tag :type="scope.row.status ===1 ? 'success':'danger'">
               {{ scope.row.status ===1 ? '启用':'禁用' }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="创建时间" prop="createTime"></el-table-column>
-        <el-table-column label="操作" width="220">
+        <el-table-column label="创建时间" prop="createTime" min-width="145"></el-table-column>
+        <el-table-column label="操作" width="255">
           <template #default="scope">
             <el-button size="small" type="primary" @click="openDialog(scope.row)">编辑</el-button>
             <el-button size="small" type="warning" @click="handleResetPwd(scope.row)">重置密码</el-button>
@@ -152,6 +152,7 @@
 </template>
 
 <script setup lang="ts">
+defineOptions({ name: 'UserManage' })
 import { ref,reactive,onMounted } from 'vue'
 import { getUserPage,saveUser,delUser,getRoleIds,resetPwd } from '@/api/system/user'
 import { ElMessage, ElMessageBox, type ElTable } from 'element-plus'
@@ -172,6 +173,14 @@ const clearSelect = () => {
 }
 
 
+
+// 菜单权限紧凑展示：最多显示前 4 个，其余显示总数（完整内容在悬浮提示里）
+const showMenus = (names?: string) => {
+  if (!names) return '无'
+  const arr = names.split(',').filter(Boolean)
+  if (arr.length <= 4) return names
+  return `${arr.slice(0, 4).join('、')} 等${arr.length}项`
+}
 
 // 表格
 const tableData = ref<any[]>([])

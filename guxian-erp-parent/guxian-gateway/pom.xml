@@ -38,6 +38,25 @@
             <artifactId>lombok</artifactId>
             <optional>true</optional>
         </dependency>
+            <!-- 负载均衡（lb://服务名路由必需） -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-loadbalancer</artifactId>
+        </dependency>
+            <!-- 全链路日志追踪（Micrometer Tracing + Zipkin） -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-tracing-bridge-brave</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.zipkin.reporter2</groupId>
+            <artifactId>zipkin-reporter-brave</artifactId>
+        </dependency>
+            <!-- actuator：激活 Micrometer Tracing / Observation 自动配置（全链路日志追踪必需） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
     </dependencies>
 
     <build>

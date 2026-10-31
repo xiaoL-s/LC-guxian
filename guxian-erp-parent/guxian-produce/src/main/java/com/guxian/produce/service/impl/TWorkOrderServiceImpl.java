@@ -44,6 +44,8 @@ public class TWorkOrderServiceImpl extends ServiceImpl<TWorkOrderMapper, TWorkOr
     @Resource
     private SalesOrderReadMapper salesOrderReadMapper;
     @Resource
+    private SysUserReadMapper sysUserReadMapper;
+    @Resource
     private TProcessDictMapper processDictMapper;
     @Resource
     private TWorkProcessRecordMapper processRecordMapper;
@@ -53,6 +55,9 @@ public class TWorkOrderServiceImpl extends ServiceImpl<TWorkOrderMapper, TWorkOr
     private TProductInstockMapper productInstockMapper;
     @Resource
     private TShelfReadMapper shelfReadMapper;
+    /** 工序产品计件价（同一工序不同产品单价不同） */
+    @Resource
+    private TProcessProductPriceMapper processProductPriceMapper;
 
     // ==================================================================
     // 拆单：已审核订单 -> 工单 + 物料需求
@@ -135,7 +140,27 @@ public class TWorkOrderServiceImpl extends ServiceImpl<TWorkOrderMapper, TWorkOr
         w.eq(StringUtils.hasText(workStatus), TWorkOrder::getWorkStatus, workStatus);
         w.eq(customerId != null, TWorkOrder::getCustomerId, customerId);
         w.orderByDesc(TWorkOrder::getWorkId);
-        return baseMapper.selectPage(page, w);
+        IPage<TWorkOrder> p = baseMapper.selectPage(page, w);
+        // 列表补充客户名称与产品名（同库共享订单表）
+        for (TWorkOrder wk : p.getRecords()) {
+            if (wk.getSalesOrderId() != null) {
+                Map<String, Object> h = salesOrderReadMapper.selectOrderHeader(wk.getSalesOrderId());
+                if (h != null && h.get("customerName") != null) {
+                    wk.setCustomerName(h.get("customerName").toString());
+                }
+                // 产品名汇总（逗号分隔，列表展示）
+                List<Map<String, Object>> oi = salesOrderReadMapper.selectOrderItems(wk.getSalesOrderId());
+                if (oi != null && !oi.isEmpty()) {
+                    String names = oi.stream()
+                            .map(x -> x.get("productName") == null ? "" : x.get("productName").toString())
+                            .filter(s -> !s.isEmpty())
+                            .distinct()
+                            .collect(Collectors.joining("、"));
+                    wk.setProductNames(names);
+                }
+            }
+        }
+        return p;
     }
 
     @Override
@@ -175,15 +200,22 @@ public class TWorkOrderServiceImpl extends ServiceImpl<TWorkOrderMapper, TWorkOr
         }
         // 订单明细
         vo.setOrderItems(salesOrderReadMapper.selectOrderItems(work.getSalesOrderId()));
-        // 工序进度
+        // 工序进度：done = 该工序在工单全部产品行都已报工（多产品工单整体进度）
         List<TProcessDict> processes = processDictMapper.selectList(new LambdaQueryWrapper<TProcessDict>()
                 .eq(TProcessDict::getStatus, 1).orderByAsc(TProcessDict::getProcessSort));
-        Map<Long, Map<String, Object>> doneMap = new HashMap<>();
+        List<Map<String, Object>> orderItems = vo.getOrderItems();
+        Set<Long> itemIds = new HashSet<>();
+        for (Map<String, Object> it : orderItems) {
+            if (it.get("itemId") != null) itemIds.add(((Number) it.get("itemId")).longValue());
+        }
         List<TWorkProcessRecord> records = processRecordMapper.selectList(new LambdaQueryWrapper<TWorkProcessRecord>()
                 .eq(TWorkProcessRecord::getWorkId, workId));
+        // processId -> (itemId -> 操作人/时间)
+        Map<Long, Map<Long, Map<String, Object>>> doneMap = new HashMap<>();
         for (TWorkProcessRecord r : records) {
-            doneMap.put(r.getProcessId(), Map.of("operUsername", r.getOperUsername() == null ? "" : r.getOperUsername(),
-                    "scanTime", r.getScanTime() == null ? "" : r.getScanTime().toString()));
+            doneMap.computeIfAbsent(r.getProcessId(), k -> new HashMap<>())
+                    .put(r.getItemId(), Map.of("operUsername", r.getOperUsername() == null ? "" : r.getOperUsername(),
+                            "scanTime", r.getScanTime() == null ? "" : r.getScanTime().toString()));
         }
         List<Map<String, Object>> processList = new ArrayList<>();
         for (TProcessDict p : processes) {
@@ -193,9 +225,14 @@ public class TWorkOrderServiceImpl extends ServiceImpl<TWorkOrderMapper, TWorkOr
             row.put("processName", p.getProcessName());
             row.put("processSort", p.getProcessSort());
             row.put("unitPrice", p.getUnitPrice());
-            row.put("done", doneMap.containsKey(p.getProcessId()));
-            row.put("operUsername", doneMap.getOrDefault(p.getProcessId(), Map.of()).get("operUsername"));
-            row.put("scanTime", doneMap.getOrDefault(p.getProcessId(), Map.of()).get("scanTime"));
+            Map<Long, Map<String, Object>> byItem = doneMap.getOrDefault(p.getProcessId(), new HashMap<>());
+            boolean done = !itemIds.isEmpty() && byItem.keySet().containsAll(itemIds);
+            row.put("done", done);
+            // 最后一条操作信息（列表展示用）
+            Map<String, Object> last = new HashMap<>();
+            for (Map<String, Object> v : byItem.values()) last = v;
+            row.put("operUsername", last.getOrDefault("operUsername", ""));
+            row.put("scanTime", last.getOrDefault("scanTime", ""));
             processList.add(row);
         }
         vo.setProcessList(processList);
@@ -207,17 +244,115 @@ public class TWorkOrderServiceImpl extends ServiceImpl<TWorkOrderMapper, TWorkOr
             Map<String, Object> row = new HashMap<>();
             row.put("id", r.getId());
             row.put("processId", r.getProcessId());
+            row.put("itemId", r.getItemId());
+            row.put("productName", r.getProductName() == null ? "" : r.getProductName());
             row.put("workerId", r.getWorkerId());
+            row.put("workerName", loadUserName(r.getWorkerId()));
             row.put("qualifiedNum", r.getQualifiedNum());
             row.put("badNum", r.getBadNum());
             row.put("unitPrice", r.getUnitPrice());
             row.put("pieceWage", r.getPieceWage());
+            row.put("remark", r.getRemark() == null ? "" : r.getRemark());
             row.put("reportTime", r.getReportTime() == null ? "" : r.getReportTime().toString());
+            row.put("updateTime", r.getUpdateTime() == null ? "" : r.getUpdateTime().toString());
             TProcessDict p = processDictMapper.selectById(r.getProcessId());
             row.put("processName", p == null ? "" : p.getProcessName());
             reportList.add(row);
         }
         vo.setReportList(reportList);
+        return vo;
+    }
+
+    @Override
+    public Map<String, Object> scanInfo(Long workId) {
+        TWorkOrder work = mustGet(workId);
+        Map<String, Object> vo = new HashMap<>();
+        vo.put("workId", work.getWorkId());
+        vo.put("workNo", work.getWorkNo());
+        vo.put("workStatus", work.getWorkStatus());
+        vo.put("workStatusDesc", descOf(work.getWorkStatus()));
+        // 客户与订单信息
+        Map<String, Object> header = work.getSalesOrderId() == null ? null
+                : salesOrderReadMapper.selectOrderHeader(work.getSalesOrderId());
+        if (header != null) {
+            vo.put("orderNo", header.get("orderNo") == null ? "" : header.get("orderNo").toString());
+            vo.put("customerName", header.get("customerName") == null ? "" : header.get("customerName").toString());
+        }
+        // 该工单订单的产品明细行（一个订单多产品，按产品行分别报工、分别计价）
+        List<Map<String, Object>> items = work.getSalesOrderId() == null ? new ArrayList<>()
+                : salesOrderReadMapper.selectOrderItems(work.getSalesOrderId());
+        // 已报记录按「产品行:工序」归集
+        List<TWorkReport> reports = workReportMapper.selectList(new LambdaQueryWrapper<TWorkReport>()
+                .eq(TWorkReport::getWorkOrderId, workId));
+        Map<String, Integer> reportedByItemProc = new HashMap<>();
+        for (TWorkReport r : reports) {
+            String key = r.getItemId() + ":" + r.getProcessId();
+            reportedByItemProc.merge(key, r.getQualifiedNum() == null ? 0 : r.getQualifiedNum(), Integer::sum);
+        }
+        // 已完成工序按产品行归集
+        List<TWorkProcessRecord> recs = processRecordMapper.selectList(new LambdaQueryWrapper<TWorkProcessRecord>()
+                .eq(TWorkProcessRecord::getWorkId, workId));
+        Map<Long, Set<Long>> doneByItem = new HashMap<>();
+        for (TWorkProcessRecord r : recs) {
+            doneByItem.computeIfAbsent(r.getItemId(), k -> new HashSet<>()).add(r.getProcessId());
+        }
+        List<Map<String, Object>> itemList = new ArrayList<>();
+        // 启用工序（供计算各产品可报工序：0 元单价 = 该产品无此工序）
+        List<TProcessDict> enabledProcs = processDictMapper.selectList(new LambdaQueryWrapper<TProcessDict>()
+                .eq(TProcessDict::getStatus, 1).orderByAsc(TProcessDict::getProcessSort));
+        // 该工单所有产品名
+        java.util.Set<String> allProducts = new java.util.HashSet<>();
+        for (Map<String, Object> it : items) {
+            String pn = it.get("productName") == null ? "" : it.get("productName").toString();
+            if (!pn.isEmpty()) allProducts.add(pn);
+        }
+        // 一次性查出本工单所有产品的工序计件价配置
+        Map<String, Map<Long, BigDecimal>> cfgByProduct = new HashMap<>();
+        if (!allProducts.isEmpty()) {
+            List<TProcessProductPrice> cfgs = processProductPriceMapper.selectList(new LambdaQueryWrapper<TProcessProductPrice>()
+                    .in(TProcessProductPrice::getProductName, allProducts));
+            for (TProcessProductPrice pp : cfgs) {
+                cfgByProduct.computeIfAbsent(pp.getProductName(), k -> new HashMap<>())
+                        .put(pp.getProcessId(), pp.getPrice());
+            }
+        }
+        for (Map<String, Object> it : items) {
+            Long itemId = it.get("itemId") == null ? null : ((Number) it.get("itemId")).longValue();
+            String productName = it.get("productName") == null ? "" : it.get("productName").toString();
+            Map<String, Object> row = new HashMap<>();
+            row.put("itemId", itemId);
+            row.put("productName", productName);
+            row.put("num", it.get("num") == null ? 0 : ((Number) it.get("num")).intValue());
+            Set<Long> doneProcs = doneByItem.getOrDefault(itemId, new HashSet<>());
+            row.put("doneProcessIds", doneProcs);
+            // 该产品可报工序：严格以产品计件价表为准（t_process_product_price）
+            // 表中配置且单价 > 0 才显示；0 元或未配置 = 该产品无此工序
+            Map<Long, BigDecimal> cfg = cfgByProduct.getOrDefault(productName, Collections.emptyMap());
+            List<Map<String, Object>> avail = new ArrayList<>();
+            for (TProcessDict pd : enabledProcs) {
+                BigDecimal cfgPrice = cfg.get(pd.getProcessId());
+                if (cfgPrice != null && cfgPrice.compareTo(BigDecimal.ZERO) > 0) {
+                    Map<String, Object> a = new HashMap<>();
+                    a.put("processId", pd.getProcessId());
+                    a.put("processName", pd.getProcessName());
+                    a.put("processCode", pd.getProcessCode());
+                    a.put("unitPrice", cfgPrice);
+                    avail.add(a);
+                }
+            }
+            row.put("availableProcesses", avail);
+            // 该产品行各工序已报合格数量
+            Map<Long, Integer> procReported = new HashMap<>();
+            for (Map.Entry<String, Integer> e : reportedByItemProc.entrySet()) {
+                String[] parts = e.getKey().split(":");
+                if (parts[0].equals(String.valueOf(itemId))) {
+                    procReported.merge(Long.valueOf(parts[1]), e.getValue(), Integer::sum);
+                }
+            }
+            row.put("processReported", procReported);
+            itemList.add(row);
+        }
+        vo.put("items", itemList);
         return vo;
     }
 
@@ -231,6 +366,9 @@ public class TWorkOrderServiceImpl extends ServiceImpl<TWorkOrderMapper, TWorkOr
         if (dto.getWorkId() == null || dto.getProcessId() == null) {
             throw new BusinessException("工单与工序不能为空");
         }
+        if (dto.getItemId() == null) {
+            throw new BusinessException("请选择要报工的产品");
+        }
         if (dto.getWorkerId() == null) {
             throw new BusinessException("请选择报工工人");
         }
@@ -238,7 +376,26 @@ public class TWorkOrderServiceImpl extends ServiceImpl<TWorkOrderMapper, TWorkOr
         if (STATUS_FINISHED.equals(work.getWorkStatus())) {
             throw new BusinessException("工单已完工，不能报工");
         }
-        // 待生产状态的工单：首次报工自动转为生产中（无需领料）
+        if (work.getSalesOrderId() == null) {
+            throw new BusinessException("工单未关联订单，无法报工");
+        }
+        // ---- 产品明细行校验：一个工单多产品，按产品行分别报工、分别计价 ----
+        Map<String, Object> item = salesOrderReadMapper.selectOrderItemById(dto.getItemId());
+        if (item == null || item.get("itemId") == null) {
+            throw new BusinessException("报工产品不存在");
+        }
+        List<Map<String, Object>> orderItems = salesOrderReadMapper.selectOrderItems(work.getSalesOrderId());
+        boolean belongs = orderItems.stream().anyMatch(x -> x.get("itemId") != null
+                && String.valueOf(x.get("itemId")).equals(String.valueOf(dto.getItemId())));
+        if (!belongs) {
+            throw new BusinessException("该产品不属于此工单的订单");
+        }
+        String productName = item.get("productName") == null ? "" : item.get("productName").toString();
+        int itemNum = item.get("num") == null ? 0 : ((Number) item.get("num")).intValue();
+        if (itemNum <= 0) {
+            throw new BusinessException("该产品数量异常，无法报工");
+        }
+        // 待生产状态的工单：首次报工自动转为生产中
         if (STATUS_WAIT.equals(work.getWorkStatus())) {
             TWorkOrder upd = new TWorkOrder();
             upd.setWorkId(dto.getWorkId());
@@ -249,53 +406,76 @@ public class TWorkOrderServiceImpl extends ServiceImpl<TWorkOrderMapper, TWorkOr
         if (process == null || process.getStatus() == null || process.getStatus() != 1) {
             throw new BusinessException("工序不存在或已停用");
         }
-        // 同一工单同一工序防重复
+        // ---- 防重复：同一工单 同一产品行 同一工序 只能报一次 ----
         LambdaQueryWrapper<TWorkProcessRecord> dup = new LambdaQueryWrapper<>();
         dup.eq(TWorkProcessRecord::getWorkId, dto.getWorkId())
+                .eq(TWorkProcessRecord::getItemId, dto.getItemId())
                 .eq(TWorkProcessRecord::getProcessId, dto.getProcessId());
         if (processRecordMapper.selectCount(dup) > 0) {
-            throw new BusinessException("该工序已完成报工，请勿重复");
+            throw new BusinessException("该产品该工序已完成报工，请勿重复");
         }
-        // ---- 工序流转校验（按纱窗厂业务流程）----
-        // 已完成的工序 code 集合
+        // ---- 工序流转校验（按产品行独立流水线）----
         LambdaQueryWrapper<TWorkProcessRecord> doneQ = new LambdaQueryWrapper<>();
-        doneQ.eq(TWorkProcessRecord::getWorkId, dto.getWorkId());
+        doneQ.eq(TWorkProcessRecord::getWorkId, dto.getWorkId())
+                .eq(TWorkProcessRecord::getItemId, dto.getItemId());
         List<TWorkProcessRecord> doneRecs = processRecordMapper.selectList(doneQ);
         java.util.Set<String> doneCodes = new java.util.HashSet<>();
         for (TWorkProcessRecord r : doneRecs) {
             if (r.getProcessCode() != null) doneCodes.add(r.getProcessCode());
         }
-        // 组装：必须开料(CUT)和剪网(CUT_NET)都完成（两工序并行，互不阻塞）
         if ("ASSEMBLE".equals(process.getProcessCode())) {
             if (!doneCodes.contains("CUT") || !doneCodes.contains("CUT_NET")) {
-                throw new BusinessException("开料和剪网两个工序全部完成后，才能组装");
+                throw new BusinessException("该产品的开料和剪网两个工序全部完成后，才能组装");
             }
         }
-        // 打包：必须组装完成
         if ("PACKAGE".equals(process.getProcessCode()) && !doneCodes.contains("ASSEMBLE")) {
-            throw new BusinessException("组装完成后才能打包");
+            throw new BusinessException("该产品组装完成后才能打包");
         }
-        // 入库上架：必须打包完成
         if ("STOCK_IN".equals(process.getProcessCode()) && !doneCodes.contains("PACKAGE")) {
-            throw new BusinessException("打包完成后才能入库上架");
+            throw new BusinessException("该产品打包完成后才能入库上架");
         }
         int qualified = dto.getQualifiedNum() == null ? 0 : dto.getQualifiedNum();
         int bad = dto.getBadNum() == null ? 0 : dto.getBadNum();
         if (qualified <= 0 && bad <= 0) {
             throw new BusinessException("合格数量与不良数量不能同时为 0");
         }
-        // 计件工资 = 合格 × 单价快照
-        BigDecimal price = process.getUnitPrice() == null ? BigDecimal.ZERO : process.getUnitPrice();
+        // ---- 数量上限校验（防虚报）：同一产品同一工序累计合格数 ≤ 该产品订单数量 ----
+        List<TWorkReport> exists = workReportMapper.selectList(new LambdaQueryWrapper<TWorkReport>()
+                .eq(TWorkReport::getWorkOrderId, dto.getWorkId())
+                .eq(TWorkReport::getItemId, dto.getItemId())
+                .eq(TWorkReport::getProcessId, dto.getProcessId()));
+        int reported = exists.stream().mapToInt(r -> r.getQualifiedNum() == null ? 0 : r.getQualifiedNum()).sum();
+        if (qualified > 0 && reported + qualified > itemNum) {
+            throw new BusinessException("报工数量超过该产品订单数量：「" + productName + "」共" + itemNum
+                    + "件，该工序已报" + reported + "件，本次最多还能报" + (itemNum - reported) + "件");
+        }
+        // ---- 计件工资 = 合格数 × 单价快照 ----
+        // 计价规则：严格以「工序 × 产品」计件价表为准；
+        // 未配置或单价 0 元 = 该产品没有此工序，禁止报工
+        LambdaQueryWrapper<TProcessProductPrice> priceQw = new LambdaQueryWrapper<TProcessProductPrice>()
+                .eq(TProcessProductPrice::getProcessId, dto.getProcessId())
+                .eq(TProcessProductPrice::getProductName, productName)
+                .last("LIMIT 1");
+        TProcessProductPrice productPrice = processProductPriceMapper.selectOne(priceQw);
+        if (productPrice == null || productPrice.getPrice() == null
+                || productPrice.getPrice().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BusinessException("该产品「" + productName + "」未配置「" + process.getProcessName()
+                    + "」计件单价（0元），无法报工");
+        }
+        BigDecimal price = productPrice.getPrice();
         BigDecimal wage = price.multiply(BigDecimal.valueOf(qualified)).setScale(2, RoundingMode.HALF_UP);
 
         TWorkReport report = new TWorkReport();
         report.setWorkOrderId(dto.getWorkId());
         report.setProcessId(dto.getProcessId());
+        report.setItemId(dto.getItemId());
+        report.setProductName(productName);
         report.setWorkerId(dto.getWorkerId());
         report.setQualifiedNum(qualified);
         report.setBadNum(bad);
         report.setUnitPrice(price);
         report.setPieceWage(wage);
+        report.setRemark(dto.getRemark());
         report.setReportTime(LocalDateTime.now());
         workReportMapper.insert(report);
 
@@ -304,6 +484,8 @@ public class TWorkOrderServiceImpl extends ServiceImpl<TWorkOrderMapper, TWorkOr
         record.setWorkId(dto.getWorkId());
         record.setWorkNo(work.getWorkNo());
         record.setProcessId(process.getProcessId());
+        record.setItemId(dto.getItemId());
+        record.setProductName(productName);
         record.setProcessCode(process.getProcessCode());
         record.setOperUserId(dto.getWorkerId());
         record.setOperUsername(loadUserName(dto.getWorkerId()));
@@ -311,6 +493,96 @@ public class TWorkOrderServiceImpl extends ServiceImpl<TWorkOrderMapper, TWorkOr
         record.setResultStatus(bad > 0 ? "FAIL" : "PASS");
         record.setRemark(dto.getRemark());
         processRecordMapper.insert(record);
+
+        // 报工流水同步到订单备注：某员工：年月日 时:分：某工序 N件
+        if (work.getSalesOrderId() != null) {
+            String workerName = record.getOperUsername();
+            String line = "\n" + (workerName.isEmpty() ? "工人" : workerName)
+                    + "：" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
+                    + "：" + process.getProcessName()
+                    + (itemNum > 0 ? "（" + productName + "）" : "")
+                    + " " + qualified + "件";
+            salesOrderReadMapper.appendOrderRemark(work.getSalesOrderId(), line);
+        }
+    }
+
+    // ==================================================================
+    // 撤回操作（仅超级管理员，防止工人误报/错报后无法修正）
+    // ==================================================================
+
+    /** 超级管理员判定：系统内置超管(id=1) 或 roles 中含"超级管理员" */
+    private void requireSuperAdmin() {
+        Long uid = UserContext.getUserId();
+        if (uid == null) {
+            throw new BusinessException("登录状态失效，请重新登录");
+        }
+        if (uid == 1L) {
+            return;
+        }
+        String roles = sysUserReadMapper.selectRoles(uid);
+        if (roles == null || !roles.contains("超级管理员")) {
+            throw new BusinessException("仅超级管理员可执行该操作");
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void revokeReport(Long workId, Long itemId, Long processId) {
+        requireSuperAdmin();
+        if (workId == null || itemId == null || processId == null) {
+            throw new BusinessException("工单、产品与工序不能为空");
+        }
+        TWorkOrder work = mustGet(workId);
+        if (STATUS_FINISHED.equals(work.getWorkStatus())) {
+            throw new BusinessException("工单已完工入库，请先撤回完工入库后再撤回报工");
+        }
+        // 该产品该工序必须已有报工记录
+        LambdaQueryWrapper<TWorkReport> reportQ = new LambdaQueryWrapper<>();
+        reportQ.eq(TWorkReport::getWorkOrderId, workId)
+                .eq(TWorkReport::getItemId, itemId)
+                .eq(TWorkReport::getProcessId, processId);
+        if (workReportMapper.selectCount(reportQ) == 0) {
+            throw new BusinessException("该产品该工序尚未报工，无需撤回");
+        }
+        // 删除报工记录与工序流水（工人工资/数量统计同步失效）
+        workReportMapper.delete(reportQ);
+        LambdaQueryWrapper<TWorkProcessRecord> recQ = new LambdaQueryWrapper<>();
+        recQ.eq(TWorkProcessRecord::getWorkId, workId)
+                .eq(TWorkProcessRecord::getItemId, itemId)
+                .eq(TWorkProcessRecord::getProcessId, processId);
+        processRecordMapper.delete(recQ);
+        // 工单状态回退：若当前"生产中"且已无任何已完成工序，回到"待生产"
+        LambdaQueryWrapper<TWorkProcessRecord> remainQ = new LambdaQueryWrapper<>();
+        remainQ.eq(TWorkProcessRecord::getWorkId, workId);
+        if (STATUS_PROCESSING.equals(work.getWorkStatus()) && processRecordMapper.selectCount(remainQ) == 0) {
+            TWorkOrder upd = new TWorkOrder();
+            upd.setWorkId(workId);
+            upd.setWorkStatus(STATUS_WAIT);
+            baseMapper.updateById(upd);
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void revokeFinish(Long workId) {
+        requireSuperAdmin();
+        TWorkOrder work = mustGet(workId);
+        if (!STATUS_FINISHED.equals(work.getWorkStatus())) {
+            throw new BusinessException("工单未完工，无需撤回");
+        }
+        // 删除该工单的成品入库单
+        LambdaQueryWrapper<TProductInstock> instockQ = new LambdaQueryWrapper<>();
+        instockQ.eq(TProductInstock::getWorkOrderId, workId);
+        productInstockMapper.delete(instockQ);
+        // 工单回"生产中"，清空完工时间
+        TWorkOrder upd = new TWorkOrder();
+        upd.setWorkId(workId);
+        upd.setWorkStatus(STATUS_PROCESSING);
+        upd.setFinishTime(null);
+        baseMapper.updateById(upd);
+        // 销售订单回写"生产中"（明细行同步回生产中）
+        salesOrderReadMapper.updateOrderStatus(work.getSalesOrderId(), ORDER_PRODUCING);
+        salesOrderReadMapper.updateItemByOrder(work.getSalesOrderId(), ITEM_PRODUCING, workId);
     }
 
     // ==================================================================
@@ -324,16 +596,27 @@ public class TWorkOrderServiceImpl extends ServiceImpl<TWorkOrderMapper, TWorkOr
         if (STATUS_FINISHED.equals(work.getWorkStatus())) {
             throw new BusinessException("工单已完工入库，请勿重复操作");
         }
-        // 校验全部启用工序已完成
+        // 校验全部启用工序、全部产品行均已完成（多产品工单：每产品每工序都必须报工）
         List<TProcessDict> processes = processDictMapper.selectList(new LambdaQueryWrapper<TProcessDict>()
                 .eq(TProcessDict::getStatus, 1).orderByAsc(TProcessDict::getProcessSort));
-        if (!processes.isEmpty()) {
-            List<TWorkProcessRecord> records = processRecordMapper.selectList(new LambdaQueryWrapper<TWorkProcessRecord>()
-                    .eq(TWorkProcessRecord::getWorkId, workId));
-            Set<Long> doneProcessIds = records.stream().map(TWorkProcessRecord::getProcessId).collect(Collectors.toSet());
-            for (TProcessDict p : processes) {
-                if (!doneProcessIds.contains(p.getProcessId())) {
-                    throw new BusinessException("尚有工序未完成：" + p.getProcessName());
+        List<Map<String, Object>> orderItems = salesOrderReadMapper.selectOrderItems(work.getSalesOrderId());
+        if (orderItems.isEmpty()) {
+            throw new BusinessException("订单无产品明细，无法完工入库");
+        }
+        List<TWorkProcessRecord> records = processRecordMapper.selectList(new LambdaQueryWrapper<TWorkProcessRecord>()
+                .eq(TWorkProcessRecord::getWorkId, workId));
+        // processId -> 已完成的产品行ID集合
+        Map<Long, Set<Long>> procItemsDone = new HashMap<>();
+        for (TWorkProcessRecord r : records) {
+            procItemsDone.computeIfAbsent(r.getProcessId(), k -> new HashSet<>()).add(r.getItemId());
+        }
+        for (TProcessDict p : processes) {
+            Set<Long> doneItems = procItemsDone.getOrDefault(p.getProcessId(), new HashSet<>());
+            for (Map<String, Object> it : orderItems) {
+                Long itemId = it.get("itemId") == null ? null : ((Number) it.get("itemId")).longValue();
+                if (itemId != null && !doneItems.contains(itemId)) {
+                    String productName = it.get("productName") == null ? "" : it.get("productName").toString();
+                    throw new BusinessException("尚有未完成：「" + productName + "」的「" + p.getProcessName() + "」");
                 }
             }
         }

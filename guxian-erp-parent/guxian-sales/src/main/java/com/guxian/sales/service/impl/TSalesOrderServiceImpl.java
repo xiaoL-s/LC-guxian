@@ -12,14 +12,12 @@ import com.guxian.sales.dto.SalesOrderDTO;
 import com.guxian.sales.dto.SalesOrderItemDTO;
 import com.guxian.sales.entity.SysDictData;
 import com.guxian.sales.entity.SysDictType;
-import com.guxian.sales.entity.TProduct;
 import com.guxian.sales.entity.TSalesOrder;
 import com.guxian.sales.entity.TSalesOrderItem;
 import com.guxian.sales.enums.FinanceStatusEnum;
 import com.guxian.sales.enums.OrderStatusEnum;
 import com.guxian.sales.mapper.SysDictDataMapper;
 import com.guxian.sales.mapper.SysDictTypeMapper;
-import com.guxian.sales.mapper.TProductMapper;
 import com.guxian.sales.mapper.TSalesOrderItemMapper;
 import com.guxian.sales.mapper.TSalesOrderMapper;
 import com.guxian.sales.service.TSalesOrderService;
@@ -80,8 +78,6 @@ public class TSalesOrderServiceImpl extends ServiceImpl<TSalesOrderMapper, TSale
 
     @Resource
     private TSalesOrderItemMapper orderItemMapper;
-    @Resource
-    private TProductMapper productMapper;
     /** 只读访问生产工单表：编辑/删除前置校验 */
     @Resource
     private com.guxian.sales.mapper.WorkOrderCheckMapper workOrderCheckMapper;
@@ -100,6 +96,7 @@ public class TSalesOrderServiceImpl extends ServiceImpl<TSalesOrderMapper, TSale
         wrapper.like(StringUtils.hasText(query.getOrderNo()), TSalesOrder::getOrderNo, query.getOrderNo());
         wrapper.like(StringUtils.hasText(query.getCustomerName()), TSalesOrder::getCustomerName, query.getCustomerName());
         wrapper.eq(query.getOrderStatus() != null, TSalesOrder::getOrderStatus, query.getOrderStatus());
+        wrapper.eq(query.getPrintFlag() != null, TSalesOrder::getPrintFlag, query.getPrintFlag());
         wrapper.eq(query.getFinanceStatus() != null, TSalesOrder::getFinanceStatus, query.getFinanceStatus());
         wrapper.eq(StringUtils.hasText(query.getOrderType()), TSalesOrder::getOrderType, query.getOrderType());
         wrapper.eq(StringUtils.hasText(query.getSalesman()), TSalesOrder::getSalesman, query.getSalesman());
@@ -268,20 +265,7 @@ public class TSalesOrderServiceImpl extends ServiceImpl<TSalesOrderMapper, TSale
             TSalesOrderItem item = new TSalesOrderItem();
             BeanUtils.copyProperties(in, item);
 
-            // 产品主数据兜底（字典驱动的产品可以没有 t_product 记录）
-            TProduct product = in.getProductId() == null ? null : productMapper.selectById(in.getProductId());
-            if (product != null) {
-                if (!StringUtils.hasText(item.getProductName())) {
-                    item.setProductName(product.getProductName());
-                }
-                if (!StringUtils.hasText(item.getProductType())) {
-                    item.setProductType(product.getProductType());
-                }
-            }
             BigDecimal unitPrice = nz(in.getUnitPrice());
-            if (unitPrice.signum() <= 0 && product != null) {
-                unitPrice = nz(product.getUnitPrice());
-            }
             item.setUnitPrice(unitPrice);
 
             // 品目/产品类型兜底：字典驱动时以"品目"作为产品类型
@@ -291,7 +275,7 @@ public class TSalesOrderServiceImpl extends ServiceImpl<TSalesOrderMapper, TSale
             }
 
             BigDecimal minArea = in.getMinArea() == null
-                    ? (product == null ? BigDecimal.ZERO : nz(product.getMinArea()))
+                    ? BigDecimal.ZERO
                     : in.getMinArea();
             item.setMinArea(minArea);
             item.setNum(num);
@@ -380,11 +364,8 @@ public class TSalesOrderServiceImpl extends ServiceImpl<TSalesOrderMapper, TSale
                 itemTotalArea = chargeArea.multiply(BigDecimal.valueOf(num)).setScale(4, RoundingMode.HALF_UP);
                 item.setItemTotalArea(itemTotalArea);
 
-                // 计算方式：1按面积 2按件（默认按面积；产品主数据可覆盖）
+                // 计算方式：1按面积 2按件（默认按面积；前端随产品字典/公式带出）
                 Integer calcType = in.getCalcType();
-                if (calcType == null && product != null && product.getPriceType() != null) {
-                    calcType = product.getPriceType();
-                }
                 if (calcType == null) {
                     calcType = 1;
                 }
@@ -491,20 +472,10 @@ public class TSalesOrderServiceImpl extends ServiceImpl<TSalesOrderMapper, TSale
                 order.getOrderNo(), order.getOrderId(), entities.size(),
                 order.getTotalArea(), order.getTotalAmount(), order.getOrderStatus());
 
-        // ---------- 新增订单：事务提交后自动拆单生成生产工单（工单号=订单号） ----------
+        // ---------- 新增订单：明细状态与订单同步为已受理 ----------
+        // 生产工单不再于保存时自动生成：订单打印生产单后才拆单生成工单并算开工（见 printOrders）
         if (!isEdit) {
-            // 明细行状态与订单同步为已受理，保证拆单/生产侧数据一致
             updateItemStatus(order.getOrderId(), OrderStatusEnum.AUDITED.getCode(), null);
-            final Long savedOrderId = order.getOrderId();
-            // 拆单由生产模块(8085)读同一数据库完成；必须在本地事务提交后再触发，
-            // 否则生产模块查不到尚未提交的订单/明细数据，导致拆单失败
-            org.springframework.transaction.support.TransactionSynchronizationManager
-                    .registerSynchronization(new org.springframework.transaction.support.TransactionSynchronization() {
-                        @Override
-                        public void afterCommit() {
-                            autoSplitOrder(savedOrderId);
-                        }
-                    });
         }
     }
 
@@ -720,6 +691,88 @@ public class TSalesOrderServiceImpl extends ServiceImpl<TSalesOrderMapper, TSale
             Thread.currentThread().interrupt();
             throw new BusinessException("调用生产服务拆单失败：" + e.getMessage());
         }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public List<Map<String, Object>> printOrders(List<Long> orderIds) {
+        if (orderIds == null || orderIds.isEmpty()) {
+            throw new BusinessException("请先勾选要打印的订单");
+        }
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Long orderId : orderIds) {
+            Map<String, Object> row = new LinkedHashMap<>();
+            TSalesOrder order = baseMapper.selectById(orderId);
+            if (order == null) {
+                row.put("orderId", orderId);
+                row.put("orderNo", "");
+                row.put("success", false);
+                row.put("msg", "订单不存在");
+                result.add(row);
+                continue;
+            }
+            row.put("orderId", order.getOrderId());
+            row.put("orderNo", order.getOrderNo());
+
+            // 已打印过：直接返回工单信息，不重复拆单（打印以最后一份为准）
+            if (order.getPrintFlag() != null && order.getPrintFlag() == 1) {
+                Long workId = workOrderCheckMapper.workIdBySalesOrderId(orderId);
+                row.put("workId", workId);
+                row.put("workNo", workOrderCheckMapper.latestWorkNo(orderId));
+                row.put("success", true);
+                row.put("msg", "已打印过，直接打印");
+                result.add(row);
+                continue;
+            }
+
+            // 未打印：调用生产模块拆单生成工单（工单号=订单号），拆单成功才算开工
+            try {
+                String token = currentToken();
+                HttpClient client = HttpClient.newBuilder()
+                        .connectTimeout(Duration.ofSeconds(5))
+                        .build();
+                HttpRequest.Builder rb = HttpRequest.newBuilder()
+                        .uri(URI.create("http://127.0.0.1:8085/production/workorder/split?salesOrderId=" + orderId))
+                        .timeout(Duration.ofSeconds(15))
+                        .POST(HttpRequest.BodyPublishers.noBody());
+                if (!token.isEmpty()) {
+                    rb.header("Authorization", token);
+                }
+                HttpResponse<String> resp = client.send(rb.build(), HttpResponse.BodyHandlers.ofString());
+                if (resp.statusCode() != 200) {
+                    throw new BusinessException("生产服务拆单失败(HTTP " + resp.statusCode() + ")");
+                }
+                com.fasterxml.jackson.databind.JsonNode node = new com.fasterxml.jackson.databind.ObjectMapper().readTree(resp.body());
+                if (node.path("code").asInt(-1) != 200) {
+                    throw new BusinessException("拆单失败：" + node.path("msg").asText());
+                }
+
+                // 拆单成功：标记已打印 + 订单状态=生产中（开工），工单号=订单号
+                TSalesOrder upd = new TSalesOrder();
+                upd.setOrderId(orderId);
+                upd.setPrintFlag(1);
+                upd.setPrintTime(LocalDateTime.now());
+                upd.setOrderStatus(OrderStatusEnum.PRODUCING.getCode());
+                baseMapper.updateById(upd);
+                updateItemStatus(orderId, OrderStatusEnum.PRODUCING.getCode(), null);
+
+                row.put("workId", node.path("data").asLong(0));
+                row.put("workNo", workOrderCheckMapper.latestWorkNo(orderId));
+                row.put("success", true);
+                row.put("msg", "打印成功，订单已开工");
+            } catch (BusinessException e) {
+                row.put("success", false);
+                row.put("msg", e.getMessage());
+            } catch (java.net.ConnectException e) {
+                row.put("success", false);
+                row.put("msg", "生产服务(8085)未启动，请先启动 guxian-produce 模块");
+            } catch (Exception e) {
+                row.put("success", false);
+                row.put("msg", "打印失败：" + e.getMessage());
+            }
+            result.add(row);
+        }
+        return result;
     }
 
     @Override

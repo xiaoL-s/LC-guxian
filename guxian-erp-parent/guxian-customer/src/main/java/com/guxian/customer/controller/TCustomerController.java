@@ -46,9 +46,9 @@ public class TCustomerController {
      */
     @PostMapping("/save")
     @OperLog(operModule = "客户管理", operType = "保存", operContent = "新增/编辑客户信息")
-    public Result<Void> save(@RequestBody TCustomerDTO dto) {
-        customerService.saveCustomer(dto);
-        return Result.success();
+    public Result<Long> save(@RequestBody TCustomerDTO dto) {
+        Long id = customerService.saveCustomer(dto);
+        return Result.success(id);
     }
 
     /**

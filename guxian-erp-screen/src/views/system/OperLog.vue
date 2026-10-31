@@ -64,6 +64,7 @@
 </template>
 
 <script setup lang="ts">
+defineOptions({ name: 'OperLog' })
 import { ref } from 'vue'
 import { getOperLogPage } from '@/api/system/operLog'
 const searchForm = ref({

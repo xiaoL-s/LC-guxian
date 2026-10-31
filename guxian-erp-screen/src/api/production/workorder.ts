@@ -16,6 +16,11 @@ export const getWorkOrderDetail = (workId: number) => request.get(`/production/w
 export const reportProcess = (data: any) => request.post('/production/workorder/report', data)
 export const finishInstock = (workId: number, shelfId?: number, remark?: string) =>
   request.post('/production/workorder/finish', null, { params: { workId, shelfId, remark } })
+// 撤回（仅超级管理员）
+export const revokeReport = (workId: number, itemId: number, processId: number) =>
+  request.post('/production/workorder/revokeReport', null, { params: { workId, itemId, processId } })
+export const revokeFinish = (workId: number) =>
+  request.post('/production/workorder/revokeFinish', null, { params: { workId } })
 
 // ===== 报工记录 =====
 export const getReportPage = (params: any) => request.get('/production/report/page', { params })

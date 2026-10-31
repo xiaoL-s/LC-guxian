@@ -1,15 +1,5 @@
 <template>
   <div class="print-template-page">
-    <!-- 页面头部 -->
-    <div class="page-header">
-      <div class="header-left">
-        <h2 class="page-title">打印模板管理</h2>
-        <p class="page-desc">类 NCReport 可视化报表设计器：拖拽组件、自由调整位置与尺寸，业务人员无需写代码。<br>
-          <b>「生产工单打印」直接读取本页 <el-tag size="small" type="primary" effect="plain">WORK_ORDER</el-tag> 类型中"默认"且"启用"的那一条模板</b>，
-          改动后生产管理 → 生产工单 → 「打印生产单」同步生效。</p>
-      </div>
-      <el-button type="primary" @click="openDialog()">＋ 新增模板</el-button>
-    </div>
     <!-- 筛选区 -->
     <el-card class="search-card" shadow="never">
       <el-form :inline="true" @submit.prevent>
@@ -33,6 +23,7 @@
         <el-form-item>
           <el-button type="primary" @click="onSearch">查询</el-button>
           <el-button @click="resetSearch">重置</el-button>
+          <el-button type="primary" plain @click="openDialog()">＋ 新增模板</el-button>
         </el-form-item>
       </el-form>
     </el-card>
@@ -224,6 +215,7 @@
                        @mousedown.stop="startMove($event, b)" @click.stop="selectBlock($event, b)">
                     <div class="qr-box">QR</div>
                     <div class="qr-cap">{{ b.label || '二维码' }}</div>
+                    <div v-if="b.qrType" class="qr-type">{{ b.qrType === 'work' ? '工单码·扫码报工' : '客户码' }}</div>
                     <template v-if="isSoloSelected(b.id)">
                       <span v-for="h in handles" :key="h" class="rh" :class="'rh-'+h"
                             @mousedown.stop="startResize($event, b, h)"></span>
@@ -293,6 +285,14 @@
                 <el-form-item v-if="activeBlock.type==='qrcode'" label="标签">
                   <el-input v-model="propLabel" />
                 </el-form-item>
+                <el-form-item v-if="activeBlock.type==='qrcode'" label="二维码内容">
+                  <el-select v-model="propQrType" style="width:100%">
+                    <el-option label="（无，仅占位）" :value="undefined" />
+                    <el-option label="工单码（工人扫码报工计件）" value="work" />
+                    <el-option label="客户/订单码（对单用）" value="customer" />
+                  </el-select>
+                  <div class="col-hint">工单码扫码后进入小程序报工，按工序计件单价累加工资。</div>
+                </el-form-item>
                 <el-form-item v-if="activeBlock.type==='text'" label="字号">
                   <el-input-number v-model="propFontSize" :min="8" :max="48" :step="1" size="small" style="width:100%" />
                 </el-form-item>
@@ -310,10 +310,20 @@
                   <el-switch v-model="propDynamic" />
                   <div class="col-hint">开启：打印时按后端数据自动展开列（序号/品名/宽/高/颜色/纱网/下固/面积/数量/单价/金额/把手/备注）</div>
                 </el-form-item>
+                <el-form-item v-if="activeBlock.type==='table'" label="隐藏空列">
+                  <el-switch v-model="propHideEmpty" />
+                  <div class="col-hint">
+                    默认关闭：配置的列全部打印，没有数据的单元格显示「—」。<br>
+                    打开后：整列都没数据的列会自动隐藏，版面更紧凑。
+                  </div>
+                </el-form-item>
                 <el-form-item v-if="activeBlock.type==='table' && !activeBlock.dynamic" label="列(逗号分隔)">
                   <el-input v-model="propColsText" type="textarea" :rows="5" @change="onColsChange"
-                            placeholder="总宽×总高,数量,颜色,固定,外框宽×高..." />
-                  <div class="col-hint">自动分组：总宽×总高→原尺寸；外框/内框/内扇/孔位/横杆→下料尺寸；上下纱/中纱→剪网尺寸。</div>
+                            placeholder="产品,总宽×总高,数量,颜色,固定,外框宽×高..." />
+                  <div class="col-hint">
+                    自动分组：总宽×总高→原尺寸；外框/内框/内扇/孔位/横杆→下料尺寸；上下纱/中纱→剪网尺寸。<br>
+                    空值显示「—」；多产品超过一页自动分页并重复表头。
+                  </div>
                 </el-form-item>
                 <el-form-item label="X"><el-input-number v-model="propX" :min="0" :step="5" size="small" style="width:100%" /></el-form-item>
                 <el-form-item label="Y"><el-input-number v-model="propY" :min="0" :step="5" size="small" style="width:100%" /></el-form-item>
@@ -361,6 +371,7 @@
   </div>
 </template>
 <script setup lang="ts">
+defineOptions({ name: 'PrintTemplate' })
 import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -370,7 +381,7 @@ import {
   togglePrintTemplateStatus,
   getPrintTemplateTypes
 } from '@/api/system/printTemplate'
-import { renderBlocksToHtml, buildDefaultBlocks, buildSalesDefaultBlocks, buildPrintContext, wrapPrintDocument, buildTableHeadRows, totalColIndex, DEFAULT_COLS, type PrintBlock } from '@/utils/cuttingSheetRenderer'
+import { renderPrintBody, buildDefaultBlocks, buildSalesDefaultBlocks, buildPrintContext, buildSalesContext, wrapPrintDocument, buildTableHeadRows, totalColIndex, DEFAULT_COLS, prepareQrData, type PrintBlock } from '@/utils/cuttingSheetRenderer'
 
 /* ===================== 列表 ===================== */
 const loading = ref(false)
@@ -714,6 +725,10 @@ const propLabel = computed({
   get: () => activeBlock.value?.label || '',
   set: (v: string) => { if (activeBlock.value) { commitBefore(); activeBlock.value.label = v } }
 })
+const propQrType = computed({
+  get: () => activeBlock.value?.qrType,
+  set: (v: any) => { if (activeBlock.value) { commitBefore(); activeBlock.value.qrType = v || undefined } }
+})
 const propField = computed({
   get: () => activeBlock.value?.field || '',
   set: (v: string) => { if (activeBlock.value) { commitBefore(); activeBlock.value.field = v || undefined } }
@@ -737,6 +752,10 @@ const propColsText = computed({
 const propDynamic = computed({
   get: () => !!activeBlock.value?.dynamic,
   set: (v: boolean) => { if (activeBlock.value) { commitBefore(); activeBlock.value.dynamic = v } }
+})
+const propHideEmpty = computed({
+  get: () => !!activeBlock.value?.hideEmptyCols,
+  set: (v: boolean) => { if (activeBlock.value) { commitBefore(); activeBlock.value.hideEmptyCols = v } }
 })
 
 /* ===================== 默认生产单模板 ===================== */
@@ -864,7 +883,7 @@ const handleDelete = (row: any) => {
 const previewVisible = ref(false)
 const previewRow = ref<any>({})
 const mockDetail = {
-  workNo: 'WO20260922003', orderNo: '202609191520', customerName: '刘家成',
+  workId: 22, workNo: 'WO20260922003', orderNo: '202609191520', customerName: '刘家成',
   customerPhone: '13800000000', customerAddress: '发货',
   expectDate: '2026-09-26', orderDate: '2026-09-19', createTime: '2026-09-19T10:00:00',
   totalArea: 3.05, shelfName: 'A区-01',
@@ -910,21 +929,35 @@ const mockSalesDetail = {
     { productName: '折边三节', width: 400, height: 1270, color: '金属灰', netMaterial: '高清网', fixedBottom: '450', singleArea: 1.55, num: 1, unitPrice: 58, lineAmount: 58, handle: '一字密码锁', remark: '二单元' }
   ]
 }
-const salesCtx = buildPrintContext(mockSalesDetail)
-const renderedPreview = computed(() => {
+const salesCtx = buildSalesContext({ ...mockSalesDetail, itemList: mockSalesDetail.orderItems })
+/** 预览 HTML：二维码是异步生成的，打开预览/打印前先刷新 */
+const renderedPreview = ref('')
+const refreshPreview = async () => {
   let list: PrintBlock[] = []
   try { list = JSON.parse(previewRow.value.templateContent || '[]') } catch {}
   if (!Array.isArray(list) || !list.length) list = blocks.value
   const isSales = (previewRow.value.templateType || form.templateType) === 'SALES_ORDER'
-  return renderBlocksToHtml(list, isSales ? salesCtx : mockCtx)
-})
-const openPreview = (row: any) => { previewRow.value = row; previewVisible.value = true }
-const doPrint = () => {
+  const ctx = isSales ? salesCtx : mockCtx
+  await prepareQrData(ctx)
+  // 用分页渲染：多产品预览也能看到完整页面（含页码）
+  renderedPreview.value = renderPrintBody(list, ctx)
+}
+const openPreview = (row: any) => {
+  previewRow.value = row
+  previewVisible.value = true
+  refreshPreview()
+}
+const doPrint = async () => {
+  await refreshPreview()
   const w = window.open('', '_blank')
   if (!w) { ElMessage.warning('请允许弹窗'); return }
   w.document.write(wrapPrintDocument(renderedPreview.value, previewRow.value.templateName || '生产单'))
   w.document.close()
-  setTimeout(() => w.print(), 300)
+  setTimeout(() => {
+    // 打印/取消后自动关闭打印窗口，避免残留空白窗口干扰操作
+    try { w.onafterprint = () => w.close() } catch { /* 忽略 */ }
+    w.print()
+  }, 300)
 }
 
 /* ===================== 生命周期 ===================== */
@@ -937,9 +970,6 @@ onMounted(() => { loadTypes(); loadTable() })
 </script>
 <style scoped>
 .print-template-page { padding: 16px; }
-.page-header { display: flex; justify-content: space-between; margin-bottom: 12px; }
-.page-title { margin: 0 0 6px; font-size: 20px; font-weight: 600; }
-.page-desc { margin: 0; color: #909399; font-size: 13px; }
 .search-card { margin-bottom: 12px; }
 .dash { color: #c0c4cc; }
 .usage-active { color: #67c23a; font-weight: 600; }
@@ -988,6 +1018,7 @@ onMounted(() => { loadTypes(); loadTable() })
 .block-line { border-top: 1px solid #333; }
 .block-qr { text-align: center; font-size: 11px; }
 .qr-box { width: 100%; height: 100%; border: 1px dashed #999; display: flex; align-items: center; justify-content: center; color: #999; }
+.qr-type { font-size: 10px; color: #1989fa; line-height: 14px; }
 .block-table { overflow: hidden; }
 .dynamic-badge {
   position: absolute; right: 2px; bottom: 2px;
@@ -996,7 +1027,8 @@ onMounted(() => { loadTypes(); loadTable() })
   line-height: 16px; z-index: 990;
 }
 .block-table .mini-table { border-collapse: collapse; width: 100%; height: 100%; }
-.block-table .mini-table th, .block-table .mini-table td { border: 1px solid #666; padding: 3px; font-size: 11px; }
+.block-table .mini-table th, .block-table .mini-table td { border: 1.5px solid #666; padding: 4px 5px; font-size: 13px; }
+.block-table .mini-table th { font-weight: bold; background: #f5f7fa; }
 .block-table .mini-table .foot-label { text-align: left; }
 .block-table .mini-table .foot-total { text-align: center; color: #909399; }
 

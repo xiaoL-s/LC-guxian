@@ -11,8 +11,8 @@ spring:
     nacos:
       discovery:
         server-addr: 127.0.0.1:8848
-        # 本地调试关闭服务注册发现，不用启动Nacos
-        enabled: false
+
+
       config:
         server-addr: 127.0.0.1:8848
         import-check:
@@ -40,60 +40,73 @@ spring:
         #     服务未启动时该前缀会转发失败（Connection refused），属预期。
         # 1.系统模块 system
         - id: guxian-system
-          uri: http://127.0.0.1:8081
+          uri: lb://guxian-system
           predicates:
             - Path=/system/**
 
         # 2.客户模块 customer
         - id: guxian-customer
-          uri: http://127.0.0.1:8082
+          uri: lb://guxian-customer
           predicates:
             - Path=/customer/**
 
         # 3.销售订单模块 sales
         - id: guxian-sales
-          uri: http://127.0.0.1:8083
+          uri: lb://guxian-sales
           predicates:
             - Path=/sales/**
 
         # 7.供应商模块 supplier（未实现）
         - id: guxian-supplier
-          uri: http://127.0.0.1:8087
+          uri: lb://guxian-supplier
           predicates:
             - Path=/supplier/**
 
-        # 5.生产模块 produce（未实现）
+        # 5.生产模块 produce（服务前缀为 /production/**，注意不是 /produce/**）
         - id: guxian-produce
-          uri: http://127.0.0.1:8085
+          uri: lb://guxian-produce
           predicates:
-            - Path=/produce/**
+            - Path=/production/**
 
         # 6.采购 purchase（未实现）
         - id: guxian-purchase
-          uri: http://127.0.0.1:8086
+          uri: lb://guxian-purchase
           predicates:
             - Path=/purchase/**
 
         # 4.库存 stock（未实现）
         - id: guxian-stock
-          uri: http://127.0.0.1:8084
+          uri: lb://guxian-stock
           predicates:
             - Path=/stock/**
 
         # 8.财务 finance（未实现）
         - id: guxian-finance
-          uri: http://127.0.0.1:8088
+          uri: lb://guxian-finance
           predicates:
             - Path=/finance/**
 
         # 9.报表 report（未实现）
         - id: guxian-report
-          uri: http://127.0.0.1:8089
+          uri: lb://guxian-report
           predicates:
             - Path=/report/**
 
         # 10.小程序 mini-api（未实现）
         - id: guxian-mini-api
-          uri: http://127.0.0.1:8090
+          uri: lb://guxian-mini-api
           predicates:
             - Path=/mini/**
+
+# 全链路日志追踪（Micrometer Tracing + Zipkin，traceId 贯穿所有微服务）
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: http://127.0.0.1:9411/api/v2/spans
+
+logging:
+  pattern:
+    level: "%5p [${spring.application.name:-},%X{traceId:-},%X{spanId:-}]"

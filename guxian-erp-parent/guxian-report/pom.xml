@@ -10,26 +10,35 @@
     </parent>
     <modelVersion>4.0.0</modelVersion>
     <artifactId>guxian-report</artifactId>
-    <name>系统权限模块</name>
+    <name>报表统计模块（8088）</name>
 
     <dependencies>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
-        <!-- Nacos -->
-        <dependency>
-            <groupId>com.alibaba.cloud</groupId>
-            <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.alibaba.cloud</groupId>
-            <artifactId>spring-cloud-starter-alibaba-nacos-config</artifactId>
-        </dependency>
-        <!-- 全局公共依赖 -->
+        <!-- 公共核心模块（Result、OperLog注解、全局异常等） -->
         <dependency>
             <groupId>com.guxian</groupId>
             <artifactId>guxian-common-core</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <!-- 公共安全模块（JWT、用户上下文、登录拦截器） -->
+        <dependency>
+            <groupId>com.guxian</groupId>
+            <artifactId>guxian-common-security</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <!-- MyBatis Plus公共模块 -->
+        <dependency>
+            <groupId>com.guxian</groupId>
+            <artifactId>guxian-common-mybatis</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <!-- Redis缓存公共模块 -->
+        <dependency>
+            <groupId>com.guxian</groupId>
+            <artifactId>guxian-common-redis</artifactId>
             <version>${project.version}</version>
         </dependency>
         <!-- OpenAPI文档 -->
@@ -42,5 +51,50 @@
             <artifactId>lombok</artifactId>
             <optional>true</optional>
         </dependency>
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-boot-starter</artifactId>
+            <version>3.5.7</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.mybatis</groupId>
+                    <artifactId>mybatis-spring</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <!--强制使用适配Spring6的mybatis-spring 3.0.4-->
+        <dependency>
+            <groupId>org.mybatis</groupId>
+            <artifactId>mybatis-spring</artifactId>
+            <version>3.0.4</version>
+        </dependency>
+        <!-- Nacos服务注册发现 -->
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
+        </dependency>
+        <!-- 全链路日志追踪（Micrometer Tracing + Zipkin） -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-tracing-bridge-brave</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.zipkin.reporter2</groupId>
+            <artifactId>zipkin-reporter-brave</artifactId>
+        </dependency>
+        <!-- actuator：激活 Micrometer Tracing / Observation 自动配置（全链路日志追踪必需） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
 </project>

@@ -45,4 +45,8 @@ public class TProcessDict {
     @TableLogic
     @TableField("del_flag")
     private Integer delFlag;
+
+    /** 该工序下产品计件单价的最近更新时间（非数据库字段，列表展示用） */
+    @TableField(exist = false)
+    private String latestPriceUpdateTime;
 }

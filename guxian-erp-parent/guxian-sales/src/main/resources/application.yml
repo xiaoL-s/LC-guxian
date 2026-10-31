@@ -1,4 +1,22 @@
-﻿spring:
+spring:
+  application:
+    name: guxian-sales
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 127.0.0.1:8848
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      password: ${REDIS_PASSWORD:}
+      database: 0
+      timeout: 5s
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
   # 数据库配置
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -25,3 +43,16 @@ mybatis-plus:
       logic-delete-field: delFlag
       logic-delete-value: 1
       logic-not-delete-value: 0
+
+# 全链路日志追踪（Micrometer Tracing + Zipkin，traceId 贯穿所有微服务）
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: http://127.0.0.1:9411/api/v2/spans
+
+logging:
+  pattern:
+    level: "%5p [${spring.application.name:-},%X{traceId:-},%X{spanId:-}]"

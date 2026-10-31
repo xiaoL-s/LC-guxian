@@ -163,4 +163,10 @@ public class TSalesOrder implements Serializable {
     @TableLogic
     @TableField("del_flag")
     private Integer delFlag;
+
+    /** 打印状态：0未打印 1已打印（打印生产单后才算开工并进生产列表） */
+    private Integer printFlag;
+
+    /** 打印时间 */
+    private LocalDateTime printTime;
 }

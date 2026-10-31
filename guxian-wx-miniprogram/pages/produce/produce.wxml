@@ -1,0 +1,19 @@
+<view class="produce-page">
+  <view class="produce-card" bindtap="goSuborder">
+    <view class="p-icon orange">子</view>
+    <view class="p-text">
+      <view class="p-title">子单生产</view>
+      <view class="p-desc">选择工序 · 扫码 · 报工计件</view>
+    </view>
+    <view class="p-arrow">›</view>
+  </view>
+
+  <view class="produce-card" bindtap="goIncome">
+    <view class="p-icon green">收</view>
+    <view class="p-text">
+      <view class="p-title">我的收入</view>
+      <view class="p-desc">今日 · 昨日 · 本月 · 上月数量</view>
+    </view>
+    <view class="p-arrow">›</view>
+  </view>
+</view>

@@ -1,0 +1,88 @@
+.index-page {
+  min-height: 100vh;
+  background: #f5f7fa;
+  padding: 30rpx;
+  box-sizing: border-box;
+}
+.user-card {
+  display: flex;
+  align-items: center;
+  background: linear-gradient(135deg, #1989fa, #5ac8fa);
+  border-radius: 28rpx;
+  padding: 36rpx 40rpx;
+  margin-bottom: 30rpx;
+  box-shadow: 0 10rpx 30rpx rgba(25, 137, 250, 0.25);
+}
+.avatar {
+  width: 100rpx;
+  height: 100rpx;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  color: #1989fa;
+  font-size: 44rpx;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.user-info {
+  margin-left: 26rpx;
+}
+.user-name {
+  color: #fff;
+  font-size: 36rpx;
+  font-weight: 600;
+}
+.user-post {
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 24rpx;
+  margin-top: 6rpx;
+}
+.menu-list {
+  background: #fff;
+  border-radius: 28rpx;
+  overflow: hidden;
+}
+.menu-item {
+  display: flex;
+  align-items: center;
+  padding: 36rpx 34rpx;
+  border-bottom: 1rpx solid #f0f2f5;
+}
+.menu-item:last-child {
+  border-bottom: none;
+}
+.menu-icon {
+  width: 84rpx;
+  height: 84rpx;
+  border-radius: 22rpx;
+  background: #e8f3fe;
+  color: #1989fa;
+  font-size: 34rpx;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.menu-icon.logout {
+  background: #fdeaea;
+  color: #fa5151;
+}
+.menu-text {
+  flex: 1;
+  margin-left: 24rpx;
+}
+.menu-title {
+  font-size: 32rpx;
+  color: #333;
+  font-weight: 600;
+}
+.menu-desc {
+  font-size: 24rpx;
+  color: #999;
+  margin-top: 6rpx;
+}
+.menu-arrow {
+  font-size: 40rpx;
+  color: #ccc;
+}

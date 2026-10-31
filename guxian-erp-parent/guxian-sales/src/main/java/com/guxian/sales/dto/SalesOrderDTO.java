@@ -90,6 +90,11 @@ public class SalesOrderDTO {
 
     private String remark;
 
+    /** 打印状态：0未打印 1已打印 */
+    private Integer printFlag;
+    /** 打印时间 */
+    private LocalDateTime printTime;
+
     /** 审核/流转信息（回显） */
     private Long auditBy;
     private LocalDateTime auditTime;

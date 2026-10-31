@@ -8,16 +8,16 @@
         <el-form-item label="客户">
           <el-input v-model="search.customerName" placeholder="客户名称" clearable style="width:150px" @keyup.enter="onSearch" />
         </el-form-item>
-        <el-form-item label="状态">
-          <el-select v-model="search.orderStatus" placeholder="全部状态" clearable style="width:130px" @change="onSearch">
-            <el-option v-for="s in ORDER_STATUS" :key="s.code" :label="s.label" :value="s.code" />
-          </el-select>
-        </el-form-item>
         <el-form-item>
           <el-button type="primary" @click="onSearch">查询</el-button>
           <el-button @click="onReset">重置</el-button>
         </el-form-item>
       </el-form>
+      <!-- 订单状态（tabs 样式，整体统一） -->
+      <el-tabs v-model="statusTab" class="status-tabs" @tab-change="onTabStatus">
+        <el-tab-pane label="全部" name="" />
+        <el-tab-pane v-for="s in ORDER_STATUS" :key="s.code" :label="s.label" :name="String(s.code)" />
+      </el-tabs>
     </el-card>
 
     <el-card shadow="never" class="table-card">
@@ -66,6 +66,7 @@
 </template>
 
 <script setup lang="ts">
+defineOptions({ name: 'OrderTrack' })
 import { ref, reactive, computed } from 'vue'
 import { getOrderPage, getOrderInfo, deliverOrder, completeOrder } from '@/api/sales/order'
 import { ORDER_STATUS, statusTag, type SalesOrder } from '@/types/sales'
@@ -76,6 +77,13 @@ const tableData = ref<SalesOrder[]>([])
 const total = ref(0)
 const page = reactive({ pageNum: 1, pageSize: 10 })
 const search = reactive({ orderNo: '', customerName: '', orderStatus: undefined as number | undefined })
+// 订单状态 tabs（整体统一样式）
+const statusTab = ref('')
+const onTabStatus = () => {
+  search.orderStatus = statusTab.value === '' ? undefined : Number(statusTab.value)
+  page.pageNum = 1
+  loadTable()
+}
 
 const loadTable = async () => {
   loading.value = true
@@ -86,7 +94,7 @@ const loadTable = async () => {
 }
 loadTable()
 const onSearch = () => { page.pageNum = 1; loadTable() }
-const onReset = () => { search.orderNo = ''; search.customerName = ''; search.orderStatus = undefined; page.pageNum = 1; loadTable() }
+const onReset = () => { search.orderNo = ''; search.customerName = ''; search.orderStatus = undefined; statusTab.value = ''; page.pageNum = 1; loadTable() }
 const fmt = (v?: number) => (Number(v) || 0).toFixed(2)
 
 // 进度时间轴
@@ -142,6 +150,8 @@ const completeFromDialog = () => { trackVisible.value = false; onComplete({ orde
 <style scoped>
 .sales-page { padding: 12px; }
 .search-card :deep(.el-card__body) { padding: 12px 12px 0; }
+.status-tabs { margin: 6px 0 0; }
+.status-tabs :deep(.el-tabs__header) { margin-bottom: 6px; }
 .table-card { margin-top: 10px; }
 .table-card :deep(.el-card__body) { padding: 12px; }
 .pager { margin-top: 10px; display: flex; justify-content: flex-end; }

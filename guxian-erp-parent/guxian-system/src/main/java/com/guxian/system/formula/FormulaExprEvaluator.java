@@ -15,7 +15,10 @@ import java.util.regex.Pattern;
  */
 public final class FormulaExprEvaluator {
 
-    private static final Pattern CN = Pattern.compile("[\\u4e00-\\u9fa5]+");
+    /** 裸字符串字面量：纯中文，或 数字/字母+中文 的混合串（如 05黑网、304灰网、PE网、304a白网、中间2根），统一包成带引号字符串 */
+    private static final Pattern CN = Pattern.compile("[0-9A-Za-z]*[\\u4e00-\\u9fa5][0-9A-Za-z\\u4e00-\\u9fa5]*");
+    /** 兜底：不含中文但含字母的连续串（如 304a、304A），视为字符串字面量（排除函数调用名如 lwxs/jw——其后紧跟括号） */
+    private static final Pattern MIXED = Pattern.compile("(?=[0-9A-Za-z]*[A-Za-z])[0-9A-Za-z]+(?![\\(0-9A-Za-z])");
     private static final Pattern QUOTED = Pattern.compile("\"[^\"]*\"");
 
     private FormulaExprEvaluator() {
@@ -42,8 +45,23 @@ public final class FormulaExprEvaluator {
         throw new IllegalArgumentException("表达式不是数值: " + expr);
     }
 
-    /** 布尔条件求值 */
+    /** 布尔条件求值：支持逗号分隔的多条件（逗号=AND，全部满足才为 true）
+     *  例如 "加杆=有,下固定=0" 表示 加杆=有 且 下固定=0 同时成立 */
     public static boolean evalBool(String expr, Map<String, Object> ctx) {
+        if (expr != null && expr.indexOf(',') >= 0) {
+            String[] parts = expr.split(",", -1);
+            for (String part : parts) {
+                String p = part.trim();
+                if (p.isEmpty()) continue;
+                if (!evalBoolSingle(p, ctx)) return false;
+            }
+            return true;
+        }
+        return evalBoolSingle(expr, ctx);
+    }
+
+    /** 单条件布尔求值（原逻辑） */
+    private static boolean evalBoolSingle(String expr, Map<String, Object> ctx) {
         Object v = eval(expr, ctx);
         if (v instanceof Boolean) {
             return (Boolean) v;
@@ -86,12 +104,30 @@ public final class FormulaExprEvaluator {
         qm.appendTail(sb1);
         String s2 = sb1.toString();
 
-        Matcher cm = CN.matcher(s2);
-        StringBuffer sb2 = new StringBuffer();
-        while (cm.find()) {
-            cm.appendReplacement(sb2, Matcher.quoteReplacement("\"" + cm.group() + "\""));
+        // 3) 剩余裸中文（含 数字/字母+中文 混合串）-> 字符串字面量；每步先保护已带引号的串，避免重复包裹
+        String s3 = wrapBare(s2, CN);
+        // 4) 兜底：不含中文但含字母的连续串（如 304a）也包成字符串（函数名如 lwxs 后跟括号则跳过）
+        return wrapBare(s3, MIXED);
+    }
+
+    /** 将未带引号的裸串按正则包裹成字符串字面量（执行期间保护已带引号内容） */
+    private static String wrapBare(String s, Pattern p) {
+        List<String> quoted = new ArrayList<>();
+        Matcher qm = QUOTED.matcher(s);
+        StringBuffer sb1 = new StringBuffer();
+        while (qm.find()) {
+            quoted.add(qm.group());
+            qm.appendReplacement(sb1, Matcher.quoteReplacement("\u0000" + (quoted.size() - 1) + "\u0000"));
         }
-        cm.appendTail(sb2);
+        qm.appendTail(sb1);
+        String s2 = sb1.toString();
+
+        Matcher m = p.matcher(s2);
+        StringBuffer sb2 = new StringBuffer();
+        while (m.find()) {
+            m.appendReplacement(sb2, Matcher.quoteReplacement("\"" + m.group() + "\""));
+        }
+        m.appendTail(sb2);
         String s3 = sb2.toString();
 
         for (int i = 0; i < quoted.size(); i++) {

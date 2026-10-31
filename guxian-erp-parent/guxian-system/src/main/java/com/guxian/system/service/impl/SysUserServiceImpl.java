@@ -92,6 +92,10 @@ private SysMenuMapper sysMenuMapper;
         resp.setUsername(user.getUsername());
         resp.setRealName(user.getRealName());
         resp.setToken(token);
+        // 超级管理员标记：系统内置超管(id=1) 或 roles 中声明"超级管理员"
+        boolean isAdmin = user.getId() != null && user.getId() == 1L
+                || (user.getRoles() != null && user.getRoles().contains("超级管理员"));
+        resp.setIsAdmin(isAdmin);
 
         return Result.success(resp);
     }

@@ -20,7 +20,7 @@
     </el-card>
 
     <!-- 表格 -->
-    <el-card style="margin-top:16px">
+    <el-card style="margin-top:10px">
       <el-table :data="tableData" border stripe ref="tableRef"
         @selection-change="handleSelectionChange"
       >
@@ -112,6 +112,7 @@
 </template>
 
 <script setup lang="ts">
+defineOptions({ name: 'Customer' })
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { getCustomerPage, saveCustomer, delCustomer } from '@/api/customer/customer'

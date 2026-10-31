@@ -44,6 +44,18 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           rewrite: path => path.replace(/^\/api\/production/, '/production')
         },
+        // 财务管理模块（8087）：计件工资统计集中于此
+        '/api/finance': {
+          target: 'http://127.0.0.1:8087',
+          changeOrigin: true,
+          rewrite: path => path.replace(/^\/api\/finance/, '/finance')
+        },
+        // 报表统计模块（8088）：销售/生产/库存/利润 四大看板
+        '/api/report': {
+          target: 'http://127.0.0.1:8088',
+          changeOrigin: true,
+          rewrite: path => path.replace(/^\/api\/report/, '/report')
+        },
         '/api': {
           target: 'http://127.0.0.1:8081',
           changeOrigin: true,

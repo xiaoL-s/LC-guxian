@@ -2,6 +2,7 @@
   <!-- ============================================================
        公式管理（仿产品详情页）：左=产品属性，右=分组公式编辑器
        全程无 JSON，工人直接看「外框宽 = 总宽-40 × 4支」这种直观行
+       易用性增强：①公式实时翻译+写错标红 ②点变量自动插入 ③条件下拉快速生成
        ============================================================ -->
   <div class="fm-wrap">
     <!-- 顶部：产品名 + 说明 -->
@@ -20,37 +21,37 @@
           <span>产品属性</span>
           <el-button size="small" type="primary" plain @click="addProp">＋ 新建产品属性</el-button>
         </div>
-        <el-table :data="model.vars" size="small" border max-height="430" style="width:100%">
-          <el-table-column label="名称" min-width="86">
+        <el-table :data="model.vars" size="small" border style="width:100%">
+          <el-table-column label="名称" min-width="76">
             <template #default="s">
               <el-input v-model="s.row.name" size="small" placeholder="如：总高" />
             </template>
           </el-table-column>
-          <el-table-column label="数据列表" min-width="120">
+          <el-table-column label="数据列表" min-width="185">
             <template #default="s">
               <el-input v-model="s.row.list" size="small" placeholder="逗号分隔，如：灰色,白色" />
             </template>
           </el-table-column>
-          <el-table-column label="默认值" width="86">
+          <el-table-column label="默认值" width="78">
             <template #default="s">
               <el-input v-model="s.row.def" size="small" />
             </template>
           </el-table-column>
-          <el-table-column label="顺序" width="60">
+          <el-table-column label="顺序" width="54">
             <template #default="s">
               <el-input v-model="s.row.sort" size="small" />
             </template>
           </el-table-column>
-          <el-table-column width="36">
+          <el-table-column width="32">
             <template #default="s">
               <el-button text type="danger" size="small" @click="delProp(s.$index)">✕</el-button>
             </template>
           </el-table-column>
         </el-table>
         <div class="fm-var-hint">
-          公式可用变量：
+          <div class="fm-var-title">公式可用变量（<b>点击插入</b>到当前输入框）</div>
           <el-tag v-for="p in model.vars.filter(v=>v.name.trim())" :key="p.name" size="small"
-                  effect="plain" class="var-tag">{{ p.name }}</el-tag>
+                  effect="plain" class="var-tag" @click="insertVar(p.name)">{{ p.name }}</el-tag>
         </div>
       </div>
 
@@ -59,15 +60,43 @@
         <!-- 变量组（$ 开头的计算中间量，如孔位/防护杆数量） -->
         <div v-for="g in model.varGroups" :key="g.key" class="fm-group">
           <div class="fm-group-title">
-            <span class="g-icon">$</span> {{ g.key }}（计算中间量）
+            <span class="g-icon blue">$</span> {{ g.key }}（计算中间量）
             <el-button size="small" text type="primary" @click="addRow(g.rows)">＋ 添加行</el-button>
           </div>
           <div class="row-head row-2">
             <span>适用条件（可为空）</span><span>公式</span><span style="width:34px"></span>
           </div>
           <div v-for="(r, i) in g.rows" :key="i" class="row-edit row-2">
-            <el-input v-model="r.cond" size="small" placeholder="如：下固定=0" />
-            <el-input v-model="r.expr" size="small" placeholder="如：(总高-40)/3" />
+            <div class="cell">
+              <div class="cell-line">
+                <el-input v-model="r.cond" size="small" placeholder="如：下固定=0" @focus="onFocus($event, v=>r.cond=v)" />
+                <el-button size="small" text type="primary" class="cond-add" title="用下拉快速生成条件" @click="toggleCond(r)">＋</el-button>
+              </div>
+              <div v-if="r._condShow" class="cond-builder">
+                <el-select v-model="r._condVar" size="small" placeholder="选变量" style="width:110px">
+                  <el-option v-for="n in condVarNames" :key="n" :label="n" :value="n" />
+                </el-select>
+                <el-select v-model="r._condOp" size="small" style="width:72px">
+                  <el-option v-for="o in COND_OPS" :key="o" :label="o" :value="o" />
+                </el-select>
+                <el-select v-if="condVarList(r._condVar).length" v-model="r._condVal" size="small" style="width:110px">
+                  <el-option v-for="opt in condVarList(r._condVar)" :key="opt" :label="opt" :value="opt" />
+                </el-select>
+                <el-input v-else v-model="r._condVal" size="small" placeholder="值" style="width:110px" />
+                <el-button size="small" type="primary" @click="applyCond(r)">确定</el-button>
+              </div>
+              <div class="fm-trans" :class="{ err: tCond(r.cond).err.length }">
+                {{ tCond(r.cond).err.length ? '✗ 不认识：' + tCond(r.cond).err.join('、') : tCond(r.cond).text }}
+              </div>
+            </div>
+            <div class="cell">
+              <div class="cell-line">
+                <el-input v-model="r.expr" size="small" placeholder="如：(总高-40)/3" @focus="onFocus($event, v=>r.expr=v)" />
+              </div>
+              <div class="fm-trans" :class="{ err: tExpr(r.expr).err.length }">
+                {{ tExpr(r.expr).err.length ? '✗ 不认识：' + tExpr(r.expr).err.join('、') : '= ' + tExpr(r.expr).text }}
+              </div>
+            </div>
             <el-button text type="danger" size="small" @click="g.rows.splice(i,1)">✕</el-button>
           </div>
         </div>
@@ -75,17 +104,54 @@
         <!-- 型材下料 -->
         <div class="fm-group">
           <div class="fm-group-title">
-            <span class="g-icon">*</span> 型材（下料尺寸，单位 mm）
+            <span class="g-icon green">*</span> 型材（下料尺寸，单位 mm）
             <el-button size="small" text type="primary" @click="addProfile">＋ 添加型材</el-button>
           </div>
           <div class="row-head row-4">
             <span>名称</span><span>单支尺寸公式</span><span>数量公式</span><span>适用条件（可为空）</span><span style="width:34px"></span>
           </div>
           <div v-for="(p, i) in model.profiles" :key="i" class="row-edit row-4">
-            <el-input v-model="p.name" size="small" placeholder="如：外框宽" />
-            <el-input v-model="p.rows[0].expr" size="small" placeholder="如：总宽-40" />
-            <el-input v-model="p.rows[0].mult" size="small" placeholder="如：2*数量" />
-            <el-input v-model="p.rows[0].cond" size="small" placeholder="可为空" />
+            <div class="cell">
+              <el-input v-model="p.name" size="small" placeholder="如：外框宽" />
+            </div>
+            <div class="cell">
+              <div class="cell-line">
+                <el-input v-model="p.rows[0].expr" size="small" placeholder="如：总宽-40" @focus="onFocus($event, v=>p.rows[0].expr=v)" />
+              </div>
+              <div class="fm-trans" :class="{ err: tExpr(p.rows[0].expr).err.length }">
+                {{ tExpr(p.rows[0].expr).err.length ? '✗ 不认识：' + tExpr(p.rows[0].expr).err.join('、') : '= ' + tExpr(p.rows[0].expr).text }}
+              </div>
+            </div>
+            <div class="cell">
+              <div class="cell-line">
+                <el-input v-model="p.rows[0].mult" size="small" placeholder="如：2*数量" @focus="onFocus($event, v=>p.rows[0].mult=v)" />
+              </div>
+              <div class="fm-trans" :class="{ err: tExpr(p.rows[0].mult).err.length }">
+                {{ tExpr(p.rows[0].mult).err.length ? '✗ 不认识：' + tExpr(p.rows[0].mult).err.join('、') : '= ' + tExpr(p.rows[0].mult).text }}
+              </div>
+            </div>
+            <div class="cell">
+              <div class="cell-line">
+                <el-input v-model="p.rows[0].cond" size="small" placeholder="可为空" @focus="onFocus($event, v=>p.rows[0].cond=v)" />
+                <el-button size="small" text type="primary" class="cond-add" title="用下拉快速生成条件" @click="toggleCond(p.rows[0])">＋</el-button>
+              </div>
+              <div v-if="p.rows[0]._condShow" class="cond-builder">
+                <el-select v-model="p.rows[0]._condVar" size="small" placeholder="选变量" style="width:110px">
+                  <el-option v-for="n in condVarNames" :key="n" :label="n" :value="n" />
+                </el-select>
+                <el-select v-model="p.rows[0]._condOp" size="small" style="width:72px">
+                  <el-option v-for="o in COND_OPS" :key="o" :label="o" :value="o" />
+                </el-select>
+                <el-select v-if="condVarList(p.rows[0]._condVar).length" v-model="p.rows[0]._condVal" size="small" style="width:110px">
+                  <el-option v-for="opt in condVarList(p.rows[0]._condVar)" :key="opt" :label="opt" :value="opt" />
+                </el-select>
+                <el-input v-else v-model="p.rows[0]._condVal" size="small" placeholder="值" style="width:110px" />
+                <el-button size="small" type="primary" @click="applyCond(p.rows[0])">确定</el-button>
+              </div>
+              <div class="fm-trans" :class="{ err: tCond(p.rows[0].cond).err.length }">
+                {{ tCond(p.rows[0].cond).err.length ? '✗ 不认识：' + tCond(p.rows[0].cond).err.join('、') : tCond(p.rows[0].cond).text }}
+              </div>
+            </div>
             <el-button text type="danger" size="small" @click="delProfile(i)">✕</el-button>
           </div>
         </div>
@@ -93,18 +159,62 @@
         <!-- 纱网 -->
         <div class="fm-group">
           <div class="fm-group-title">
-            <span class="g-icon">*</span> 纱网（剪网尺寸，单位 mm）
+            <span class="g-icon green">*</span> 纱网（剪网尺寸，单位 mm）
             <el-button size="small" text type="primary" @click="addNet">＋ 添加纱网</el-button>
           </div>
           <div class="row-head row-5">
             <span>名称</span><span>宽公式</span><span>高公式</span><span>张数公式</span><span>适用条件（可为空）</span><span style="width:34px"></span>
           </div>
           <div v-for="(p, i) in model.nets" :key="i" class="row-edit row-5">
-            <el-input v-model="p.name" size="small" placeholder="如：上网" />
-            <el-input v-model="p.rows[0].w" size="small" placeholder="如：内扇宽+15" />
-            <el-input v-model="p.rows[0].h" size="small" placeholder="如：内扇高-10" />
-            <el-input v-model="p.rows[0].mult" size="small" placeholder="如：1*数量" />
-            <el-input v-model="p.rows[0].cond" size="small" placeholder="可为空" />
+            <div class="cell">
+              <el-input v-model="p.name" size="small" placeholder="如：上网" />
+            </div>
+            <div class="cell">
+              <div class="cell-line">
+                <el-input v-model="p.rows[0].w" size="small" placeholder="如：内扇宽+15" @focus="onFocus($event, v=>p.rows[0].w=v)" />
+              </div>
+              <div class="fm-trans" :class="{ err: tExpr(p.rows[0].w).err.length }">
+                {{ tExpr(p.rows[0].w).err.length ? '✗ 不认识：' + tExpr(p.rows[0].w).err.join('、') : '= ' + tExpr(p.rows[0].w).text }}
+              </div>
+            </div>
+            <div class="cell">
+              <div class="cell-line">
+                <el-input v-model="p.rows[0].h" size="small" placeholder="如：内扇高-10" @focus="onFocus($event, v=>p.rows[0].h=v)" />
+              </div>
+              <div class="fm-trans" :class="{ err: tExpr(p.rows[0].h).err.length }">
+                {{ tExpr(p.rows[0].h).err.length ? '✗ 不认识：' + tExpr(p.rows[0].h).err.join('、') : '= ' + tExpr(p.rows[0].h).text }}
+              </div>
+            </div>
+            <div class="cell">
+              <div class="cell-line">
+                <el-input v-model="p.rows[0].mult" size="small" placeholder="如：1*数量" @focus="onFocus($event, v=>p.rows[0].mult=v)" />
+              </div>
+              <div class="fm-trans" :class="{ err: tExpr(p.rows[0].mult).err.length }">
+                {{ tExpr(p.rows[0].mult).err.length ? '✗ 不认识：' + tExpr(p.rows[0].mult).err.join('、') : '= ' + tExpr(p.rows[0].mult).text }}
+              </div>
+            </div>
+            <div class="cell">
+              <div class="cell-line">
+                <el-input v-model="p.rows[0].cond" size="small" placeholder="可为空" @focus="onFocus($event, v=>p.rows[0].cond=v)" />
+                <el-button size="small" text type="primary" class="cond-add" title="用下拉快速生成条件" @click="toggleCond(p.rows[0])">＋</el-button>
+              </div>
+              <div v-if="p.rows[0]._condShow" class="cond-builder">
+                <el-select v-model="p.rows[0]._condVar" size="small" placeholder="选变量" style="width:110px">
+                  <el-option v-for="n in condVarNames" :key="n" :label="n" :value="n" />
+                </el-select>
+                <el-select v-model="p.rows[0]._condOp" size="small" style="width:72px">
+                  <el-option v-for="o in COND_OPS" :key="o" :label="o" :value="o" />
+                </el-select>
+                <el-select v-if="condVarList(p.rows[0]._condVar).length" v-model="p.rows[0]._condVal" size="small" style="width:110px">
+                  <el-option v-for="opt in condVarList(p.rows[0]._condVar)" :key="opt" :label="opt" :value="opt" />
+                </el-select>
+                <el-input v-else v-model="p.rows[0]._condVal" size="small" placeholder="值" style="width:110px" />
+                <el-button size="small" type="primary" @click="applyCond(p.rows[0])">确定</el-button>
+              </div>
+              <div class="fm-trans" :class="{ err: tCond(p.rows[0].cond).err.length }">
+                {{ tCond(p.rows[0].cond).err.length ? '✗ 不认识：' + tCond(p.rows[0].cond).err.join('、') : tCond(p.rows[0].cond).text }}
+              </div>
+            </div>
             <el-button text type="danger" size="small" @click="delNet(i)">✕</el-button>
           </div>
         </div>
@@ -112,15 +222,43 @@
         <!-- 面积 -->
         <div class="fm-group">
           <div class="fm-group-title">
-            <span class="g-icon">$</span> 面积（㎡）
+            <span class="g-icon blue">$</span> 面积（㎡）
             <el-button size="small" text type="primary" @click="addArea">＋ 添加行</el-button>
           </div>
           <div class="row-head row-2">
             <span>适用条件（可为空）</span><span>面积公式</span><span style="width:34px"></span>
           </div>
           <div v-for="(r, i) in model.areas" :key="i" class="row-edit row-2">
-            <el-input v-model="r.cond" size="small" placeholder="如：总高*总宽*0.000001>1" />
-            <el-input v-model="r.expr" size="small" placeholder="如：总高*总宽*0.000001*数量" />
+            <div class="cell">
+              <div class="cell-line">
+                <el-input v-model="r.cond" size="small" placeholder="如：总高*总宽*0.000001>1" @focus="onFocus($event, v=>r.cond=v)" />
+                <el-button size="small" text type="primary" class="cond-add" title="用下拉快速生成条件" @click="toggleCond(r)">＋</el-button>
+              </div>
+              <div v-if="r._condShow" class="cond-builder">
+                <el-select v-model="r._condVar" size="small" placeholder="选变量" style="width:110px">
+                  <el-option v-for="n in condVarNames" :key="n" :label="n" :value="n" />
+                </el-select>
+                <el-select v-model="r._condOp" size="small" style="width:72px">
+                  <el-option v-for="o in COND_OPS" :key="o" :label="o" :value="o" />
+                </el-select>
+                <el-select v-if="condVarList(r._condVar).length" v-model="r._condVal" size="small" style="width:110px">
+                  <el-option v-for="opt in condVarList(r._condVar)" :key="opt" :label="opt" :value="opt" />
+                </el-select>
+                <el-input v-else v-model="r._condVal" size="small" placeholder="值" style="width:110px" />
+                <el-button size="small" type="primary" @click="applyCond(r)">确定</el-button>
+              </div>
+              <div class="fm-trans" :class="{ err: tCond(r.cond).err.length }">
+                {{ tCond(r.cond).err.length ? '✗ 不认识：' + tCond(r.cond).err.join('、') : tCond(r.cond).text }}
+              </div>
+            </div>
+            <div class="cell">
+              <div class="cell-line">
+                <el-input v-model="r.expr" size="small" placeholder="如：总高*总宽*0.000001*数量" @focus="onFocus($event, v=>r.expr=v)" />
+              </div>
+              <div class="fm-trans" :class="{ err: tExpr(r.expr).err.length }">
+                {{ tExpr(r.expr).err.length ? '✗ 不认识：' + tExpr(r.expr).err.join('、') : '= ' + tExpr(r.expr).text }}
+              </div>
+            </div>
             <el-button text type="danger" size="small" @click="model.areas.splice(i,1)">✕</el-button>
           </div>
         </div>
@@ -128,22 +266,53 @@
         <!-- 金额明细 -->
         <div class="fm-group">
           <div class="fm-group-title">
-            <span class="g-icon">*</span> 金额明细（元，同名多行自动累加）
+            <span class="g-icon green">*</span> 金额明细（元，同名多行自动累加）
             <el-button size="small" text type="primary" @click="addAmount">＋ 添加金额项</el-button>
           </div>
           <div class="row-head row-3">
             <span>名称</span><span>金额公式</span><span>适用条件（可为空）</span><span style="width:34px"></span>
           </div>
           <div v-for="(p, i) in model.amounts" :key="i" class="row-edit row-3">
-            <el-input v-model="p.name" size="small" placeholder="如：基本金额" />
-            <el-input v-model="p.rows[0].expr" size="small" placeholder="如：单价*面积" />
-            <el-input v-model="p.rows[0].cond" size="small" placeholder="可为空" />
+            <div class="cell">
+              <el-input v-model="p.name" size="small" placeholder="如：基本金额" />
+            </div>
+            <div class="cell">
+              <div class="cell-line">
+                <el-input v-model="p.rows[0].expr" size="small" placeholder="如：单价*面积" @focus="onFocus($event, v=>p.rows[0].expr=v)" />
+              </div>
+              <div class="fm-trans" :class="{ err: tExpr(p.rows[0].expr).err.length }">
+                {{ tExpr(p.rows[0].expr).err.length ? '✗ 不认识：' + tExpr(p.rows[0].expr).err.join('、') : '= ' + tExpr(p.rows[0].expr).text }}
+              </div>
+            </div>
+            <div class="cell">
+              <div class="cell-line">
+                <el-input v-model="p.rows[0].cond" size="small" placeholder="可为空" @focus="onFocus($event, v=>p.rows[0].cond=v)" />
+                <el-button size="small" text type="primary" class="cond-add" title="用下拉快速生成条件" @click="toggleCond(p.rows[0])">＋</el-button>
+              </div>
+              <div v-if="p.rows[0]._condShow" class="cond-builder">
+                <el-select v-model="p.rows[0]._condVar" size="small" placeholder="选变量" style="width:110px">
+                  <el-option v-for="n in condVarNames" :key="n" :label="n" :value="n" />
+                </el-select>
+                <el-select v-model="p.rows[0]._condOp" size="small" style="width:72px">
+                  <el-option v-for="o in COND_OPS" :key="o" :label="o" :value="o" />
+                </el-select>
+                <el-select v-if="condVarList(p.rows[0]._condVar).length" v-model="p.rows[0]._condVal" size="small" style="width:110px">
+                  <el-option v-for="opt in condVarList(p.rows[0]._condVar)" :key="opt" :label="opt" :value="opt" />
+                </el-select>
+                <el-input v-else v-model="p.rows[0]._condVal" size="small" placeholder="值" style="width:110px" />
+                <el-button size="small" type="primary" @click="applyCond(p.rows[0])">确定</el-button>
+              </div>
+              <div class="fm-trans" :class="{ err: tCond(p.rows[0].cond).err.length }">
+                {{ tCond(p.rows[0].cond).err.length ? '✗ 不认识：' + tCond(p.rows[0].cond).err.join('、') : tCond(p.rows[0].cond).text }}
+              </div>
+            </div>
             <el-button text type="danger" size="small" @click="delAmount(i)">✕</el-button>
           </div>
         </div>
 
         <div class="fm-tip">
-          提示：条件为空表示始终成立；条件示例「下固定=0」「加杆=全防护」「{加杆=有,下固定>0}」多条件用花括号+逗号。
+          <b>使用小贴士：</b>① 先点击某个输入框，再点左侧变量，变量自动插入；② 条件框点「＋」用下拉选择，不用手写；
+          ③ 输入框下方绿字实时翻译，出现红字说明有字写错（不认识）；④ 条件为空表示始终成立，多条件示例「{加杆=有,下固定>0}」。
           金额明细同名称多行会全部累加（如 总高>1399 与 总高>1499 两档叠加）。
         </div>
       </div>
@@ -218,18 +387,21 @@
  * 产品公式管理器（仿产品详情页）
  *  - 左侧：产品属性列表（名称/数据列表/默认值/顺序，数据列表用于测试时下拉选择）
  *  - 右侧：分组公式编辑器（$变量组 / *型材 / *纱网 / $面积 / *金额明细）
- *  - 底部：测试 / 保存 / 取消
+ *  - 易用性：公式实时翻译（绿字）+ 写错变量标红（红字）、左侧变量点击插入、条件下拉构造器
  * 底层仍存 JSON（后端引擎读取），但编辑界面全程可视化，工人无需接触代码。
  * ============================================================
  */
-import { ref, reactive, computed, watch } from 'vue'
+import { ref, computed } from 'vue'
 import { updateDictData, testDictFormula } from '@/api/system/dict'
 import { ElMessage } from 'element-plus'
 
 /** 属性定义 */
 interface PropDef { name: string; list: string; def: string; sort: number }
-/** 公式行 */
-interface RowDef { cond: string; expr: string; mult: string; w: string; h: string }
+/** 公式行（_cond* 为条件下拉构造器的临时编辑状态，不入库） */
+interface RowDef {
+  cond: string; expr: string; mult: string; w: string; h: string
+  _condShow?: boolean; _condVar?: string; _condOp?: string; _condVal?: string
+}
 /** 变量组（顶层数组，如 孔位/防护杆数量） */
 interface GroupDef { key: string; rows: RowDef[] }
 /** 型材/纱网/金额明细项（名称 + 行） */
@@ -356,6 +528,134 @@ const addArea = () => model.value.areas.push(emptyRow())
 const addAmount = () => model.value.amounts.push({ name: '', rows: [emptyRow()] })
 const delAmount = (i: number) => model.value.amounts.splice(i, 1)
 
+/* ============================================================
+ * 增强①：公式实时翻译 + 不认识的字标红
+ * ============================================================ */
+/** 运算符 → 大白话 */
+const OP_TEXT: Record<string, string> = {
+  '+': ' 加 ', '-': ' 减 ', '*': ' 乘 ', '/': ' 除以 ',
+  '==': ' 等于 ', '=': ' 等于 ', '>': ' 大于 ', '<': ' 小于 ',
+  '>=': ' 大于等于 ', '<=': ' 小于等于 ', '!=': ' 不等于 '
+}
+/** 表达式分词：数字（含小数）/ 中文或字母开头的标识符 / 运算符 / 括号 */
+const TOKEN_RE = /[0-9]+(?:\.[0-9]+)?|[\u4e00-\u9fa5A-Za-z][\u4e00-\u9fa5A-Za-z0-9]*|>=|<=|==|!=|>|<|=|\+|-|\*|\/|\(|\)/g
+const tokenize = (s: string): string[] => {
+  const r: string[] = []
+  TOKEN_RE.lastIndex = 0
+  let m: RegExpExecArray | null
+  while ((m = TOKEN_RE.exec(s))) r.push(m[0])
+  return r
+}
+/** 引擎内建变量 + 已知中间量（这些都不算写错） */
+const BUILTIN_VARS = ['数量','单价','面积','总高','总宽','下固定','加杆','颜色','网子','把手','把手方向','开向',
+  '纱子','纱网型号','纱网颜色','外框颜色','型材颜色','尺寸类型','高度','成功高','孔位','防护杆数量','超高',
+  '外框成本单价','纱网成本单价','纱网颜色单价','单价加价','配件成本','人工成本','辅料成本','总成本','毛利润']
+/** 全部"认识的字"：产品属性 + 中间量 + 型材/纱网/金额项名称 + 引擎内建变量 */
+const allVarNames = computed(() => {
+  const set = new Set<string>()
+  model.value.vars.forEach(v => { if (v.name.trim()) set.add(v.name.trim()) })
+  model.value.varGroups.forEach(g => set.add(g.key))
+  model.value.profiles.forEach(p => { if (p.name.trim()) set.add(p.name.trim()) })
+  model.value.nets.forEach(p => { if (p.name.trim()) set.add(p.name.trim()) })
+  model.value.amounts.forEach(p => { if (p.name.trim()) set.add(p.name.trim()) })
+  BUILTIN_VARS.forEach(n => set.add(n))
+  return [...set]
+})
+/** 找出字符串里所有"不认识的字"（排除数字/运算符/括号/函数名） */
+const unknownVars = (str: string): string[] => {
+  const uniq: string[] = []
+  for (const t of tokenize(str)) {
+    if (/^[0-9]+(?:\.[0-9]+)?$/.test(t)) continue
+    if (OP_TEXT[t] || t === '(' || t === ')') continue
+    if (t === 'lwxs' || t === 'jw') continue
+    if (!allVarNames.value.includes(t) && !uniq.includes(t)) uniq.push(t)
+  }
+  return uniq
+}
+/** 公式翻译：如 总宽-40 → 总宽 减 40；写错标红 */
+const tExpr = (expr: string): { text: string; err: string[] } => {
+  if (!expr.trim()) return { text: '', err: [] }
+  let out = ''
+  const errs: string[] = []
+  for (const t of tokenize(expr)) {
+    if (/^[0-9]+(?:\.[0-9]+)?$/.test(t)) { out += t; continue }
+    if (OP_TEXT[t]) { out += OP_TEXT[t]; continue }
+    if (t === '(') { out += '('; continue }
+    if (t === ')') { out += ')'; continue }
+    if (t === 'lwxs' || t === 'jw') { out += t; continue }
+    if (allVarNames.value.includes(t)) { out += t; continue }
+    if (!errs.includes(t)) errs.push(t)
+  }
+  return { text: out, err: errs }
+}
+/** 条件翻译：如 下固定=0 → 当下固定 等于 0 时；空 → 始终成立 */
+const tCond = (cond: string): { text: string; err: string[] } => {
+  if (!cond.trim()) return { text: '（空 = 始终成立）', err: [] }
+  let inner = cond.trim()
+  if (inner.startsWith('{') && inner.endsWith('}')) inner = inner.slice(1, -1)
+  const segs = inner.split(',')
+  const parts: string[] = []
+  const errs: string[] = []
+  segs.forEach(s => {
+    const m = s.match(/^(.+?)(>=|<=|==|!=|=|>|<)(.+)$/)
+    if (!m) { parts.push(s); errs.push(...unknownVars(s)); return }
+    const vn = m[1].trim(), op = m[2], val = m[3].trim()
+    parts.push(`${vn} ${OP_TEXT[op] || op} ${val}`)
+    errs.push(...unknownVars(vn))
+  })
+  return { text: '当 ' + parts.join(' 且 ') + ' 时', err: errs }
+}
+
+/* ============================================================
+ * 增强②：左侧变量点击插入到当前输入框
+ * ============================================================ */
+let focusTarget: { el: HTMLInputElement; set: (v: string) => void } | null = null
+/** 记录当前聚焦的公式输入框（含回写方法） */
+const onFocus = (e: FocusEvent, set: (v: string) => void) => {
+  focusTarget = { el: e.target as HTMLInputElement, set }
+}
+/** 点击变量：插入到当前聚焦输入框的光标处 */
+const insertVar = (name: string) => {
+  if (!focusTarget) { ElMessage.info('请先点击要插入的输入框，再点变量'); return }
+  const el = focusTarget.el
+  const s = el.selectionStart ?? el.value.length
+  const epos = el.selectionEnd ?? el.value.length
+  const nv = el.value.slice(0, s) + name + el.value.slice(epos)
+  focusTarget.set(nv)
+  requestAnimationFrame(() => { el.focus(); el.setSelectionRange(s + name.length, s + name.length) })
+}
+
+/* ============================================================
+ * 增强③：条件下拉构造器（小白不用手写条件语法）
+ * ============================================================ */
+const COND_OPS = ['=', '>', '<', '>=', '<=', '!=']
+/** 可作条件变量的：产品属性名称 */
+const condVarNames = computed(() => model.value.vars.filter(v => v.name.trim()).map(v => v.name.trim()))
+/** 该变量的数据列表（有列表则下拉选值，否则手填） */
+const condVarList = (name?: string): string[] => {
+  if (!name) return []
+  const v = model.value.vars.find(x => x.name.trim() === name)
+  return v && v.list ? v.list.split(/[,，]/).map(s => s.trim()).filter(Boolean) : []
+}
+/** 展开/收起条件构造器 */
+const toggleCond = (r: RowDef) => {
+  r._condShow = !r._condShow
+  if (r._condShow) { r._condVar = r._condVar || ''; r._condOp = r._condOp || '='; r._condVal = r._condVal ?? '' }
+}
+/** 把构造器的「变量 运算符 值」拼成条件语法；多个条件自动用 {a,b} 包裹 */
+const applyCond = (r: RowDef) => {
+  const v = r._condVar, op = r._condOp, val = r._condVal
+  if (!v) { ElMessage.warning('请选择条件变量'); return }
+  if (!op) { ElMessage.warning('请选择比较方式'); return }
+  if (val === undefined || val === null || String(val).trim() === '') { ElMessage.warning('请填写条件值'); return }
+  const seg = `${v}${op}${String(val).trim()}`
+  const cur = (r.cond || '').trim()
+  if (!cur) r.cond = seg
+  else if (cur.startsWith('{') && cur.endsWith('}')) r.cond = cur.slice(0, -1) + ',' + seg + '}'
+  else r.cond = '{' + cur + ',' + seg + '}'
+  r._condShow = false
+}
+
 /* ---------- 保存 ---------- */
 const save = async () => {
   // 基础校验：型材/纱网/金额明细至少填了名称或公式
@@ -369,7 +669,7 @@ const save = async () => {
 /* ---------- 测试 ---------- */
 const testVisible = ref(false)
 const testError = ref('')
-const testVars = ref<{ name: string; list: string }[]>([])
+const testVars = ref<{ name: string; list: string; def?: string }[]>([])
 const testParams = ref<Record<string, string>>({})
 const testResult = ref<any>(null)
 
@@ -379,7 +679,7 @@ const openTest = () => {
   testResult.value = null
   testVars.value = model.value.vars.filter(v => v.name.trim())
   testParams.value = {}
-  testVars.value.forEach(v => { testParams.value[v.name] = v.def })
+  testVars.value.forEach(v => { testParams.value[v.name] = v.def ?? '' })
   if (!testVars.value.length) {
     // 属性为空时给常用兜底，保证可测
     testVars.value = ['总高', '总宽', '数量', '下固定', '加杆', '单价', '把手'].map(name => ({ name, list: '' }))
@@ -438,28 +738,50 @@ const amtRows = computed(() => {
 .fm-sub { font-size: 12px; color: #909399; margin-left: 10px; }
 .fm-body { display: flex; gap: 12px; }
 /* 左：属性 */
-.fm-left { width: 300px; flex-shrink: 0; border: 1px solid #ebeef5; border-radius: 6px; padding: 10px; height: fit-content; }
-.fm-panel-title { display: flex; justify-content: space-between; align-items: center; font-weight: 600; color: #303133; margin-bottom: 8px; }
-.fm-var-hint { font-size: 12px; color: #909399; margin-top: 8px; line-height: 1.8; }
-.var-tag { margin-right: 4px; }
+.fm-left { width: 450px; flex-shrink: 0; border: 1px solid #e4e7ed; border-radius: 8px; padding: 12px; height: fit-content; background: #fff; }
+.fm-panel-title { display: flex; justify-content: space-between; align-items: center; font-weight: 600; color: #303133; padding-bottom: 8px; border-bottom: 1px solid #f0f2f5; margin-bottom: 10px; }
+.fm-var-hint { font-size: 12px; color: #909399; margin-top: 10px; line-height: 1.8; background: #f8f9fb; border-radius: 6px; padding: 8px 10px; }
+.fm-var-title { margin-bottom: 4px; }
+.var-tag { margin-right: 4px; cursor: pointer; user-select: none; transition: all .15s; }
+.var-tag:hover { background: #ecf5ff; color: #1989fa; border-color: #a0cfff; }
 /* 右：公式 */
-.fm-right { flex: 1; display: flex; flex-direction: column; gap: 10px; }
-.fm-group { border: 1px solid #ebeef5; border-radius: 6px; padding: 8px 10px; }
-.fm-group-title { display: flex; align-items: center; gap: 6px; font-weight: 600; color: #303133; margin-bottom: 6px; }
-.g-icon { color: #1989fa; font-weight: 700; }
-.row-head { display: flex; gap: 6px; font-size: 11px; color: #909399; margin-bottom: 4px; }
-.row-edit { display: flex; gap: 6px; margin-bottom: 4px; }
-.row-edit .el-input { flex: 1; }
-.row-head > span, .row-edit > .el-input { flex: 1; }
-.row-2 > span:nth-child(1), .row-2 > .el-input:nth-child(1) { flex: 1.1; }
-.row-3 > span:nth-child(1), .row-3 > .el-input:nth-child(1) { flex: 1.2; }
-.row-4 > span:nth-child(1), .row-4 > .el-input:nth-child(1) { flex: 1.1; }
-.row-4 > span:nth-child(2), .row-4 > .el-input:nth-child(2) { flex: 1.4; }
-.row-5 > span:nth-child(1), .row-5 > .el-input:nth-child(1) { flex: 1.1; }
-.row-5 > span:nth-child(2), .row-5 > .el-input:nth-child(2) { flex: 1.2; }
-.row-5 > span:nth-child(3), .row-5 > .el-input:nth-child(3) { flex: 1.2; }
-.fm-tip { font-size: 12px; color: #909399; background: #f5f7fa; padding: 8px 10px; border-radius: 4px; line-height: 1.7; }
-.fm-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.fm-right { flex: 1; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.fm-group { border: 1px solid #e4e7ed; border-radius: 8px; padding: 10px 12px; background: #fff; }
+.fm-group-title { display: flex; align-items: center; gap: 6px; font-weight: 600; color: #303133;
+  background: #f5f7fa; margin: -10px -12px 8px; padding: 8px 12px; border-bottom: 1px solid #ebeef5; border-radius: 8px 8px 0 0; }
+.g-icon { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px;
+  border-radius: 4px; color: #fff; font-size: 12px; flex-shrink: 0; }
+.g-icon.blue { background: #1989fa; }
+.g-icon.green { background: #67c23a; }
+.row-head { display: flex; gap: 6px; font-size: 11px; color: #909399; margin-bottom: 4px; padding: 0 2px; }
+.row-edit { display: flex; gap: 6px; margin-bottom: 6px; padding: 0 2px; }
+.row-edit > .cell { flex: 1; min-width: 0; }
+.row-head > span, .row-edit > .cell { flex: 1; }
+.row-2 > span:nth-child(1), .row-2 > .cell:nth-child(1) { flex: 1.0; }
+.row-2 > span:nth-child(2), .row-2 > .cell:nth-child(2) { flex: 1.4; }
+.row-3 > span:nth-child(1), .row-3 > .cell:nth-child(1) { flex: 1.0; }
+.row-3 > span:nth-child(2), .row-3 > .cell:nth-child(2) { flex: 1.5; }
+.row-3 > span:nth-child(3), .row-3 > .cell:nth-child(3) { flex: 1.1; }
+.row-4 > span:nth-child(1), .row-4 > .cell:nth-child(1) { flex: 1.0; }
+.row-4 > span:nth-child(2), .row-4 > .cell:nth-child(2) { flex: 1.6; }
+.row-4 > span:nth-child(3), .row-4 > .cell:nth-child(3) { flex: 0.9; }
+.row-4 > span:nth-child(4), .row-4 > .cell:nth-child(4) { flex: 1.0; }
+.row-5 > span:nth-child(1), .row-5 > .cell:nth-child(1) { flex: 1.0; }
+.row-5 > span:nth-child(2), .row-5 > .cell:nth-child(2) { flex: 1.2; }
+.row-5 > span:nth-child(3), .row-5 > .cell:nth-child(3) { flex: 1.2; }
+.row-5 > span:nth-child(4), .row-5 > .cell:nth-child(4) { flex: 0.9; }
+.row-5 > span:nth-child(5), .row-5 > .cell:nth-child(5) { flex: 1.1; }
+/* 单元格内：输入框 + 翻译行 + 条件构造器 */
+.cell-line { display: flex; align-items: center; gap: 2px; }
+.cell-line .el-input { flex: 1; }
+.cond-add { flex-shrink: 0; }
+.fm-trans { font-size: 11px; color: #67c23a; line-height: 1.5; margin-top: 1px; min-height: 16px;
+  white-space: normal; overflow: visible; word-break: break-all; }
+.fm-trans.err { color: #f56c6c; }
+.cond-builder { display: flex; gap: 4px; align-items: center; margin: 3px 0 4px; flex-wrap: wrap;
+  background: #f5f7fa; padding: 4px; border-radius: 4px; }
+.fm-tip { font-size: 12px; color: #909399; background: #f8f9fb; border: 1px dashed #dcdfe6; padding: 8px 10px; border-radius: 6px; line-height: 1.7; }
+.fm-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; border-top: 1px solid #f0f2f5; padding-top: 12px; }
 /* 测试 */
 .test-error { background: #fef0f0; color: #f56c6c; padding: 8px 12px; border-radius: 4px; margin-bottom: 10px; font-size: 13px; }
 .test-panel-title { font-weight: 600; color: #303133; margin-bottom: 10px; font-size: 13px; }

@@ -1,0 +1,31 @@
+<view class="income-page">
+  <!-- 个人信息 -->
+  <view class="user-card">
+    <view class="avatar">{{user.realName[0] || '工'}}</view>
+    <view class="user-info">
+      <view class="user-name">{{user.realName || '—'}}</view>
+      <view class="user-post">{{user.postType || '计件工人'}}</view>
+    </view>
+  </view>
+
+  <!-- 统计卡片 -->
+  <view class="stat-list" wx:if="{{!loading && items.length}}">
+    <view class="stat-card" wx:for="{{items}}" wx:key="label">
+      <view class="stat-label">{{item.label}}</view>
+      <view class="stat-wage">¥{{item.wageText}}</view>
+      <view class="stat-num-row">
+        <text class="stat-qty">合格 {{item.qualifiedNum || 0}} 件</text>
+        <text class="stat-bad" wx:if="{{item.badNum}}">不良 {{item.badNum}} 件</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 出错提示 -->
+  <view wx:elif="{{!loading && errMsg}}" class="empty err">{{errMsg}}</view>
+  <!-- 无数据 -->
+  <view wx:elif="{{!loading}}" class="empty">暂无报工数据，快去扫码报工吧</view>
+  <view wx:else class="empty">加载中...</view>
+
+  <!-- 手动刷新 -->
+  <button class="refresh-btn" bindtap="load">重新加载</button>
+</view>

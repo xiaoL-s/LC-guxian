@@ -14,9 +14,10 @@
             <el-option v-for="t in orderTypeOptions" :key="t" :label="t" :value="t" />
           </el-select>
         </el-form-item>
-        <el-form-item label="订单状态">
-          <el-select v-model="search.orderStatus" placeholder="全部" clearable style="width: 130px">
-            <el-option v-for="s in ORDER_STATUS" :key="s.code" :label="s.label" :value="s.code" />
+        <el-form-item label="打印状态">
+          <el-select v-model="search.printFlag" placeholder="全部" clearable style="width: 120px">
+            <el-option label="未打印" :value="0" />
+            <el-option label="已打印" :value="1" />
           </el-select>
         </el-form-item>
         <el-form-item label="财务状态">
@@ -33,202 +34,278 @@
           <el-button @click="onReset">重置</el-button>
         </el-form-item>
       </el-form>
+      <!-- 订单状态（tabs 样式，整体统一） -->
+      <el-tabs v-model="statusTab" class="status-tabs" @tab-change="onTabStatus">
+        <el-tab-pane label="全部" name="" />
+        <el-tab-pane v-for="s in ORDER_STATUS" :key="s.code" :label="s.label" :name="String(s.code)" />
+      </el-tabs>
     </el-card>
 
-    <!-- 订单列表 -->
+    <!-- 订单卡片列表 -->
     <el-card shadow="never" class="table-card">
       <div class="toolbar">
         <div class="toolbar-left">
           <el-button type="primary" size="small" @click="goCreate">＋ 新建订单</el-button>
           <el-button size="small" @click="loadTable">刷新</el-button>
+          <el-button type="warning" size="small" :disabled="checkedIds.length === 0" :loading="printing" @click="printSelected">
+            批量打印<span v-if="checkedIds.length">({{ checkedIds.length }})</span>
+          </el-button>
           <span class="tip">共 {{ total }} 张订单</span>
-        </div>
-        <div class="toolbar-right">
-          <el-popover placement="bottom-end" :width="420" trigger="click">
-            <template #reference>
-              <el-button size="small">列设置</el-button>
-            </template>
-            <el-checkbox-group v-model="visibleCols">
-              <el-checkbox v-for="c in optionalCols" :key="c.key" :label="c.key" :value="c.key">{{ c.label }}</el-checkbox>
-            </el-checkbox-group>
-          </el-popover>
         </div>
       </div>
 
-      <el-table :data="tableData" v-loading="loading" border stripe size="small" height="calc(100vh - 300px)"
-        :header-cell-style="{ background: '#f5f7fa', color: '#303133', fontSize: '12px' }">
-        <el-table-column type="index" label="#" width="46" align="center" fixed />
-        <el-table-column label="订单号" prop="orderNo" width="132" fixed show-overflow-tooltip>
-          <template #default="s">
-            <el-link type="primary" :underline="false" @click="viewDetail(s.row)">{{ s.row.orderNo }}</el-link>
-          </template>
-        </el-table-column>
-        <el-table-column label="子单数" prop="subOrderCount" width="64" align="center" />
+      <div v-loading="loading" class="order-list">
+        <div v-for="(row, idx) in tableData" :key="row.orderId" class="order-card"
+          :class="{ expanded: isExpanded(row) }">
+          <!-- 信息栏（每格独立展示，不挤在一起） -->
+          <div class="order-head">
+            <div class="head-cell seq-cell">
+              <span class="cell-label">序号</span>
+              <span class="cell-value seq-line">
+                <el-checkbox :model-value="checkedIds.includes(row.orderId!)" size="small" @change="(v: any) => onCheck(row, v)" />
+                <span class="seq">{{ (page.pageNum - 1) * page.pageSize + idx + 1 }}</span>
+              </span>
+            </div>
 
-        <el-table-column v-if="show('customerName')" label="客户" prop="customerName" min-width="120" show-overflow-tooltip />
-        <el-table-column v-if="show('terminalAddress')" label="终端地址" prop="terminalAddress" min-width="140" show-overflow-tooltip />
-        <el-table-column v-if="show('logistics')" label="物流" prop="logistics" width="90" show-overflow-tooltip />
-        <el-table-column v-if="show('unit')" label="单位" prop="unit" width="60" align="center" />
-        <el-table-column v-if="show('orderType')" label="订单类型" prop="orderType" width="88" align="center" />
-        <el-table-column v-if="show('orderStatus')" label="状态" width="98" align="center">
-          <template #default="s">
-            <el-tag :type="statusTag(s.row.orderStatus).type as any" size="small" effect="light">{{ s.row.orderStatusDesc }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column v-if="show('financeStatus')" label="财务状态" width="104" align="center">
-          <template #default="s">
-            <el-tag :type="financeTag(s.row.financeStatus).type as any" size="small" effect="plain">{{ s.row.financeStatusDesc }}</el-tag>
-          </template>
-        </el-table-column>
+            <div class="head-cell order-no-cell" title="点击查看订单详情">
+              <span class="cell-label">订单编号</span>
+              <span class="cell-value">
+                <el-link type="primary" :underline="false" @click="toggleDetail(row)">{{ row.orderNo }}</el-link>
+                <el-tag size="small" type="info" class="sub-tag">{{ row.subOrderCount }}子单</el-tag>
+              </span>
+            </div>
 
-        <el-table-column v-if="show('totalArea')" label="总面积㎡" prop="totalArea" width="88" align="right" />
-        <el-table-column v-if="show('totalAmount')" label="销售金额" prop="totalAmount" width="100" align="right">
-          <template #default="s"><b>{{ money(s.row.totalAmount) }}</b></template>
-        </el-table-column>
-        <el-table-column v-if="show('receiveAmount')" label="已付金额" prop="receiveAmount" width="96" align="right">
-          <template #default="s">{{ money(s.row.receiveAmount) }}</template>
-        </el-table-column>
-        <el-table-column v-if="show('unpaidAmount')" label="未付金额" prop="unpaidAmount" width="96" align="right">
-          <template #default="s">
-            <span :class="{ 'text-danger': Number(s.row.unpaidAmount) > 0 }">{{ money(s.row.unpaidAmount) }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column v-if="show('profitAmount')" label="利润" prop="profitAmount" width="92" align="right">
-          <template #default="s">{{ money(s.row.profitAmount) }}</template>
-        </el-table-column>
+            <div class="head-cell">
+              <span class="cell-label">订单类型</span>
+              <span class="cell-value">{{ row.orderType || '—' }}</span>
+            </div>
 
-        <el-table-column v-if="show('contact')" label="联系方式" width="112" show-overflow-tooltip>
-          <template #default="s">{{ s.row.contact }}<span v-if="s.row.phone"> / {{ s.row.phone }}</span></template>
-        </el-table-column>
-        <el-table-column v-if="show('salesman')" label="业务员" prop="salesman" width="86" show-overflow-tooltip />
-        <el-table-column v-if="show('remark')" label="备注" prop="remark" min-width="120" show-overflow-tooltip />
-        <el-table-column v-if="show('orderDate')" label="下单时间" prop="orderDate" width="104" align="center" />
-        <el-table-column v-if="show('expectDate')" label="计划交货" prop="expectDate" width="104" align="center" />
+            <div class="head-cell">
+              <span class="cell-label">财务状态</span>
+              <span class="cell-value">
+                <el-tag :type="financeTag(row.financeStatus).type as any" size="small" effect="plain">{{ row.financeStatusDesc || '—' }}</el-tag>
+              </span>
+            </div>
 
-        <el-table-column label="操作" width="210" fixed="right" align="center">
-          <template #default="s">
-            <el-button size="small" type="primary" link @click="viewDetail(s.row)">详情</el-button>
-            <el-button v-if="canEdit(s.row)" size="small" type="warning" link @click="goEdit(s.row)">编辑</el-button>
-            <el-button v-if="s.row.orderStatus === 0" size="small" type="success" link @click="onPass(s.row)">受理</el-button>
-            <el-button v-if="s.row.orderStatus === 0" size="small" type="danger" link @click="onReject(s.row)">驳回</el-button>
-            <el-dropdown trigger="click" @command="(cmd: string) => onCommand(cmd, s.row)">
-              <el-button size="small" type="primary" link>更多</el-button>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item command="receive" :disabled="s.row.orderStatus === 7">收款</el-dropdown-item>
-                  <el-dropdown-item command="settle" :disabled="s.row.financeStatus === 3">结清</el-dropdown-item>
-                  <el-dropdown-item command="start" :disabled="s.row.orderStatus !== 1" divided>开工</el-dropdown-item>
-                  <el-dropdown-item command="finish" :disabled="s.row.orderStatus !== 2">完工</el-dropdown-item>
-                  <el-dropdown-item command="deliver" :disabled="s.row.orderStatus !== 3">发货</el-dropdown-item>
-                  <el-dropdown-item command="complete" :disabled="s.row.orderStatus !== 4">完成</el-dropdown-item>
-                  <el-dropdown-item command="cancel" :disabled="![0, 6].includes(s.row.orderStatus)" divided>取消</el-dropdown-item>
-                  <el-dropdown-item command="delete" :disabled="[1, 2, 3, 4, 5].includes(s.row.orderStatus)">删除</el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
-          </template>
-        </el-table-column>
-      </el-table>
+            <div class="head-cell">
+              <span class="cell-label">订单状态</span>
+              <span class="cell-value">
+                <el-tag :type="statusTag(row.orderStatus).type as any" size="small" effect="light">{{ row.orderStatusDesc || '—' }}</el-tag>
+              </span>
+            </div>
+
+            <div class="head-cell">
+              <span class="cell-label">打印状态</span>
+              <span class="cell-value">
+                <el-tag v-if="Number(row.printFlag) === 1" type="success" size="small" effect="plain">已打印</el-tag>
+                <el-tag v-else type="info" size="small" effect="plain">未打印</el-tag>
+                <span v-if="Number(row.printFlag) === 1 && row.printTime" class="print-time">{{ fmtTime(row.printTime) }}</span>
+              </span>
+            </div>
+
+            <div class="head-cell">
+              <span class="cell-label">计划交货</span>
+              <span class="cell-value">{{ row.expectDate || '—' }}</span>
+            </div>
+
+            <div class="head-cell">
+              <span class="cell-label">物流</span>
+              <span class="cell-value">{{ row.logistics || '—' }}</span>
+            </div>
+
+            <div class="head-cell">
+              <span class="cell-label">客户</span>
+              <span class="cell-value">{{ row.customerName || '—' }}</span>
+            </div>
+
+            <div class="head-cell">
+              <span class="cell-label">联系电话</span>
+              <span class="cell-value">{{ row.phone || row.contact || '—' }}</span>
+            </div>
+
+            <div class="head-cell addr-cell">
+              <span class="cell-label">终端地址</span>
+              <span class="cell-value addr">{{ row.terminalAddress || '—' }}</span>
+            </div>
+
+            <div class="head-cell">
+              <span class="cell-label">下单时间</span>
+              <span class="cell-value">{{ row.orderDate || '—' }}</span>
+            </div>
+
+            <div class="head-cell">
+              <span class="cell-label">业务员</span>
+              <span class="cell-value">{{ row.salesman || '—' }}</span>
+            </div>
+
+            <div class="head-cell money-cell">
+              <span class="cell-label">面积 / 金额</span>
+              <span class="cell-value money">
+                {{ row.totalArea }}㎡ · <b>¥{{ money(row.totalAmount) }}</b>
+                <span v-if="Number(row.unpaidAmount) > 0" class="unpaid">未付 ¥{{ money(row.unpaidAmount) }}</span>
+              </span>
+            </div>
+
+            <div class="head-actions">
+              <el-button size="small" type="primary" link @click="toggleDetail(row)">
+                {{ isExpanded(row) ? '收起详情' : '详情' }}
+              </el-button>
+              <el-button v-if="canEdit(row)" size="small" type="warning" link @click="goEdit(row)">编辑</el-button>
+              <el-button v-if="row.orderStatus === 0" size="small" type="success" link @click="onPass(row)">受理</el-button>
+              <el-button v-if="row.orderStatus === 0" size="small" type="danger" link @click="onReject(row)">驳回</el-button>
+              <el-dropdown trigger="click" @command="(cmd: string) => onCommand(cmd, row)">
+                <el-button size="small" type="primary" link>更多</el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="printSales" divided>打印销售单</el-dropdown-item>
+                    <el-dropdown-item command="receive" :disabled="row.orderStatus === 7">收款</el-dropdown-item>
+                    <el-dropdown-item command="settle" :disabled="row.financeStatus === 3">结清</el-dropdown-item>
+                    <el-dropdown-item command="start" :disabled="row.orderStatus !== 1" divided>开工</el-dropdown-item>
+                    <el-dropdown-item command="finish" :disabled="row.orderStatus !== 2">完工</el-dropdown-item>
+                    <el-dropdown-item command="deliver" :disabled="row.orderStatus !== 3">发货</el-dropdown-item>
+                    <el-dropdown-item command="complete" :disabled="row.orderStatus !== 4">完成</el-dropdown-item>
+                    <el-dropdown-item command="cancel" :disabled="![0, 6].includes(row.orderStatus)" divided>取消</el-dropdown-item>
+                    <el-dropdown-item command="delete" :disabled="[1, 2, 3, 4, 5].includes(row.orderStatus)">删除</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </div>
+          </div>
+
+          <!-- 展开的订单详情（在订单下方） -->
+          <div v-if="isExpanded(row)" class="order-detail">
+            <template v-if="row._detail">
+              <el-tabs v-model="detailTab" size="small">
+                <el-tab-pane label="订单信息" name="info">
+                  <el-descriptions :column="4" border size="small">
+                    <el-descriptions-item label="订单号">{{ row._detail.orderNo }}</el-descriptions-item>
+                    <el-descriptions-item label="订单类型">{{ row._detail.orderType || '—' }}</el-descriptions-item>
+                    <el-descriptions-item label="订单状态">
+                      <el-tag :type="statusTag(row._detail.orderStatus).type as any" size="small">{{ row._detail.orderStatusDesc }}</el-tag>
+                    </el-descriptions-item>
+                    <el-descriptions-item label="财务状态">
+                      <el-tag :type="financeTag(row._detail.financeStatus).type as any" size="small" effect="plain">{{ row._detail.financeStatusDesc }}</el-tag>
+                    </el-descriptions-item>
+
+                    <el-descriptions-item label="客户">{{ row._detail.customerName }}</el-descriptions-item>
+                    <el-descriptions-item label="联系方式">{{ row._detail.contact }} {{ row._detail.phone }}</el-descriptions-item>
+                    <el-descriptions-item label="物流">{{ row._detail.logistics || '—' }}</el-descriptions-item>
+                    <el-descriptions-item label="单位">{{ row._detail.unit || '—' }}</el-descriptions-item>
+
+                    <el-descriptions-item label="终端地址" :span="2">{{ row._detail.terminalAddress || row._detail.address || '—' }}</el-descriptions-item>
+                    <el-descriptions-item label="品牌">{{ row._detail.brand || '—' }}</el-descriptions-item>
+                    <el-descriptions-item label="安装方式">{{ row._detail.installType || '—' }}</el-descriptions-item>
+
+                    <el-descriptions-item label="设计师">{{ row._detail.designer || '—' }}</el-descriptions-item>
+                    <el-descriptions-item label="拆单师">{{ row._detail.splitter || '—' }}</el-descriptions-item>
+                    <el-descriptions-item label="业务员">{{ row._detail.salesman || '—' }}</el-descriptions-item>
+                    <el-descriptions-item label="客户来源">{{ row._detail.customerSource || '—' }}</el-descriptions-item>
+
+                    <el-descriptions-item label="下单时间">{{ row._detail.orderDate || '—' }}</el-descriptions-item>
+                    <el-descriptions-item label="计划交货">{{ row._detail.expectDate || '—' }}</el-descriptions-item>
+                    <el-descriptions-item label="投影面积">{{ row._detail.projectionArea || 0 }} ㎡</el-descriptions-item>
+                    <el-descriptions-item label="大板数">{{ row._detail.bigBoardNum || 0 }}</el-descriptions-item>
+
+                    <el-descriptions-item v-if="row._detail.orderStatus === 6" label="驳回原因" :span="4">
+                      <span class="text-danger">{{ row._detail.rejectReason }}</span>
+                    </el-descriptions-item>
+                    <el-descriptions-item v-if="row._detail.cancelReason" label="取消原因" :span="4">{{ row._detail.cancelReason }}</el-descriptions-item>
+                  </el-descriptions>
+                </el-tab-pane>
+
+                <el-tab-pane label="产品明细" name="items">
+                  <el-table :data="row._detail.itemList || []" border size="small">
+                    <el-table-column type="index" label="#" width="42" align="center" />
+                    <el-table-column label="子单号" prop="subOrderNo" width="140" />
+                    <el-table-column label="产品" prop="productName" min-width="140" show-overflow-tooltip />
+                    <el-table-column label="品目" prop="itemCategory" width="110" show-overflow-tooltip />
+                    <el-table-column label="颜色" prop="color" width="76" show-overflow-tooltip />
+                    <el-table-column label="网子" prop="netMaterial" width="80" show-overflow-tooltip />
+                    <el-table-column label="把手" prop="handle" width="76" show-overflow-tooltip />
+                    <el-table-column label="锁具" prop="lockSet" width="76" show-overflow-tooltip />
+                    <el-table-column label="把手方向" prop="handleDirection" width="80" align="center" />
+                    <el-table-column label="开向" prop="openDirection" width="70" align="center" />
+                    <el-table-column label="加杆" prop="addRod" width="70" align="center" />
+                    <el-table-column label="下固定" prop="fixedBottom" width="76" align="center" />
+                    <el-table-column label="总宽" prop="width" width="76" align="right" />
+                    <el-table-column label="总高" prop="height" width="76" align="right" />
+                    <el-table-column label="扣宽" prop="deductWidth" width="70" align="right" />
+                    <el-table-column label="净宽" prop="netWidth" width="76" align="right" />
+                    <el-table-column label="数量" prop="num" width="56" align="center" />
+                    <el-table-column label="单位" prop="unit" width="56" align="center" />
+                    <el-table-column label="单价" prop="unitPrice" width="76" align="right" />
+                    <el-table-column label="面积㎡" prop="itemTotalArea" width="86" align="right" />
+                    <el-table-column label="金额" prop="lineAmount" width="92" align="right" />
+                    <el-table-column label="备注" prop="remark" min-width="90" show-overflow-tooltip />
+                  </el-table>
+                </el-tab-pane>
+
+                <el-tab-pane label="金额汇总" name="money">
+                  <el-row :gutter="12">
+                    <el-col :span="12">
+                      <el-descriptions :column="2" border size="small">
+                        <el-descriptions-item label="产品金额">{{ money(row._detail.productAmount) }}</el-descriptions-item>
+                        <el-descriptions-item label="工艺加价">{{ money(row._detail.craftFee) }}</el-descriptions-item>
+                        <el-descriptions-item label="加急费">{{ money(row._detail.urgentFee) }}</el-descriptions-item>
+                        <el-descriptions-item label="运费">{{ money(row._detail.freight) }}</el-descriptions-item>
+                        <el-descriptions-item label="优惠减价">{{ money(row._detail.discountAmount) }}</el-descriptions-item>
+                        <el-descriptions-item label="总面积">{{ row._detail.totalArea }} ㎡</el-descriptions-item>
+                      </el-descriptions>
+                    </el-col>
+                    <el-col :span="12">
+                      <div class="sum-box">
+                        <div class="sum-row"><span>订单总金额</span><b>￥{{ money(row._detail.totalAmount) }}</b></div>
+                        <div class="sum-row"><span>已付金额</span><b>￥{{ money(row._detail.receiveAmount) }}</b></div>
+                        <div class="sum-row"><span>未付金额</span><b class="text-danger">￥{{ money(row._detail.unpaidAmount) }}</b></div>
+                        <div class="sum-row sum-total"><span>利润 / 毛利率</span>
+                          <b class="price">￥{{ money(row._detail.profitAmount) }} / {{ percent(row._detail.grossProfitRate) }}</b>
+                        </div>
+                      </div>
+                    </el-col>
+                  </el-row>
+                </el-tab-pane>
+
+                <el-tab-pane label="备注信息" name="remark">
+                  <div class="remark-wrap">
+                    <!-- 订单原始备注 -->
+                    <div v-if="row._detail.remark" class="remark-order">
+                      <div class="remark-order-label">订单备注</div>
+                      <div class="remark-order-text">{{ row._detail.remark }}</div>
+                    </div>
+
+                    <!-- 工作人员备注记录（类似物流详情：操作人 + 时间 + 内容） -->
+                    <div class="remark-record-label">备注记录</div>
+                    <div v-loading="row._remarksLoading" class="remark-list">
+                      <div v-if="!row._remarks || row._remarks.length === 0" class="remark-empty">暂无备注记录</div>
+                      <div v-for="r in row._remarks" :key="r.id" class="remark-item">
+                        <div class="remark-item-head">
+                          <span class="remark-name">{{ r.createByName || '系统' }}</span>
+                          <span class="remark-time">{{ fmtTime(r.createTime) }}</span>
+                        </div>
+                        <div class="remark-item-text">{{ r.remark }}</div>
+                      </div>
+                    </div>
+
+                    <!-- 添加备注 -->
+                    <div class="remark-add">
+                      <el-button type="primary" size="small" :loading="row._remarkSaving"
+                        @click="addRemark(row)">添加备注</el-button>
+                    </div>
+                  </div>
+                </el-tab-pane>
+              </el-tabs>
+            </template>
+            <div v-else class="detail-loading">详情加载中...</div>
+          </div>
+        </div>
+        <el-empty v-if="!loading && tableData.length === 0" description="暂无订单" />
+      </div>
 
       <div class="pager">
         <el-pagination v-model:current-page="page.pageNum" v-model:page-size="page.pageSize" :total="total"
           :page-sizes="[10, 20, 50, 100]" small layout="total, sizes, prev, pager, next, jumper" @change="loadTable" />
       </div>
     </el-card>
-
-    <!-- 订单详情 -->
-    <el-dialog v-model="detailVisible" :title="`订单详情 - ${detail.orderNo || ''}`" width="1000px" destroy-on-close top="6vh">
-      <el-descriptions :column="4" border size="small">
-        <el-descriptions-item label="订单号">{{ detail.orderNo }}</el-descriptions-item>
-        <el-descriptions-item label="订单类型">{{ detail.orderType }}</el-descriptions-item>
-        <el-descriptions-item label="订单状态">
-          <el-tag :type="statusTag(detail.orderStatus).type as any" size="small">{{ detail.orderStatusDesc }}</el-tag>
-        </el-descriptions-item>
-        <el-descriptions-item label="财务状态">
-          <el-tag :type="financeTag(detail.financeStatus).type as any" size="small" effect="plain">{{ detail.financeStatusDesc }}</el-tag>
-        </el-descriptions-item>
-
-        <el-descriptions-item label="客户">{{ detail.customerName }}</el-descriptions-item>
-        <el-descriptions-item label="联系方式">{{ detail.contact }} {{ detail.phone }}</el-descriptions-item>
-        <el-descriptions-item label="物流">{{ detail.logistics || '—' }}</el-descriptions-item>
-        <el-descriptions-item label="单位">{{ detail.unit || '—' }}</el-descriptions-item>
-
-        <el-descriptions-item label="终端地址" :span="2">{{ detail.terminalAddress || detail.address || '—' }}</el-descriptions-item>
-        <el-descriptions-item label="品牌">{{ detail.brand || '—' }}</el-descriptions-item>
-        <el-descriptions-item label="安装方式">{{ detail.installType || '—' }}</el-descriptions-item>
-
-        <el-descriptions-item label="设计师">{{ detail.designer || '—' }}</el-descriptions-item>
-        <el-descriptions-item label="拆单师">{{ detail.splitter || '—' }}</el-descriptions-item>
-        <el-descriptions-item label="业务员">{{ detail.salesman || '—' }}</el-descriptions-item>
-        <el-descriptions-item label="客户来源">{{ detail.customerSource || '—' }}</el-descriptions-item>
-
-        <el-descriptions-item label="下单时间">{{ detail.orderDate || '—' }}</el-descriptions-item>
-        <el-descriptions-item label="计划交货">{{ detail.expectDate || '—' }}</el-descriptions-item>
-        <el-descriptions-item label="投影面积">{{ detail.projectionArea || 0 }} ㎡</el-descriptions-item>
-        <el-descriptions-item label="大板数">{{ detail.bigBoardNum || 0 }}</el-descriptions-item>
-
-        <el-descriptions-item label="备注" :span="4">{{ detail.remark || '—' }}</el-descriptions-item>
-        <el-descriptions-item v-if="detail.orderStatus === 6" label="驳回原因" :span="4">
-          <span class="text-danger">{{ detail.rejectReason }}</span>
-        </el-descriptions-item>
-        <el-descriptions-item v-if="detail.cancelReason" label="取消原因" :span="4">{{ detail.cancelReason }}</el-descriptions-item>
-      </el-descriptions>
-
-      <el-table :data="detail.itemList" border size="small" style="margin-top: 10px">
-        <el-table-column type="index" label="#" width="42" align="center" />
-        <el-table-column label="子单号" prop="subOrderNo" width="140" />
-        <el-table-column label="产品" prop="productName" min-width="140" show-overflow-tooltip />
-        <el-table-column label="品目" prop="itemCategory" width="110" show-overflow-tooltip />
-        <el-table-column label="颜色" prop="color" width="76" show-overflow-tooltip />
-        <el-table-column label="网子" prop="netMaterial" width="80" show-overflow-tooltip />
-        <el-table-column label="把手" prop="handle" width="76" show-overflow-tooltip />
-        <el-table-column label="锁具" prop="lockSet" width="76" show-overflow-tooltip />
-        <el-table-column label="把手方向" prop="handleDirection" width="80" align="center" />
-        <el-table-column label="开向" prop="openDirection" width="70" align="center" />
-        <el-table-column label="加杆" prop="addRod" width="70" align="center" />
-        <el-table-column label="下固定" prop="fixedBottom" width="76" align="center" />
-        <el-table-column label="总宽" prop="width" width="76" align="right" />
-        <el-table-column label="总高" prop="height" width="76" align="right" />
-        <el-table-column label="扣宽" prop="deductWidth" width="70" align="right" />
-        <el-table-column label="净宽" prop="netWidth" width="76" align="right" />
-        <el-table-column label="数量" prop="num" width="56" align="center" />
-        <el-table-column label="单位" prop="unit" width="56" align="center" />
-        <el-table-column label="单价" prop="unitPrice" width="76" align="right" />
-        <el-table-column label="面积㎡" prop="itemTotalArea" width="86" align="right" />
-        <el-table-column label="金额" prop="lineAmount" width="92" align="right" />
-        <el-table-column label="备注" prop="remark" min-width="90" show-overflow-tooltip />
-      </el-table>
-
-      <el-row :gutter="12" style="margin-top: 10px">
-        <el-col :span="12">
-          <el-descriptions :column="2" border size="small">
-            <el-descriptions-item label="产品金额">{{ money(detail.productAmount) }}</el-descriptions-item>
-            <el-descriptions-item label="工艺加价">{{ money(detail.craftFee) }}</el-descriptions-item>
-            <el-descriptions-item label="加急费">{{ money(detail.urgentFee) }}</el-descriptions-item>
-            <el-descriptions-item label="运费">{{ money(detail.freight) }}</el-descriptions-item>
-            <el-descriptions-item label="优惠减价">{{ money(detail.discountAmount) }}</el-descriptions-item>
-            <el-descriptions-item label="总面积">{{ detail.totalArea }} ㎡</el-descriptions-item>
-          </el-descriptions>
-        </el-col>
-        <el-col :span="12">
-          <div class="sum-box">
-            <div class="sum-row"><span>订单总金额</span><b>￥{{ money(detail.totalAmount) }}</b></div>
-            <div class="sum-row"><span>已付金额</span><b>￥{{ money(detail.receiveAmount) }}</b></div>
-            <div class="sum-row"><span>未付金额</span><b class="text-danger">￥{{ money(detail.unpaidAmount) }}</b></div>
-            <div class="sum-row sum-total"><span>利润 / 毛利率</span>
-              <b class="price">￥{{ money(detail.profitAmount) }} / {{ percent(detail.grossProfitRate) }}</b>
-            </div>
-          </div>
-        </el-col>
-      </el-row>
-
-      <template #footer>
-        <el-button size="small" @click="detailVisible = false">关闭</el-button>
-        <el-button v-if="detail.orderStatus === 0" size="small" type="success" @click="detailVisible = false; onPass(detail)">受理</el-button>
-        <el-button v-if="canEdit(detail)" size="small" type="warning" @click="detailVisible = false; goEdit(detail)">编辑</el-button>
-        <el-button v-if="detail.orderStatus !== 7" size="small" type="primary" @click="detailVisible = false; onCommand('receive', detail)">收款</el-button>
-      </template>
-    </el-dialog>
 
     <!-- 收款登记 -->
     <el-dialog v-model="payVisible" title="收款登记" width="420px" destroy-on-close>
@@ -253,13 +330,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+defineOptions({ name: 'OrderList' })
+import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getOrderPage, getOrderInfo, auditPassOrder, auditRejectOrder, delOrder, cancelOrder,
-  deliverOrder, completeOrder, startProduceOrder, finishProduceOrder, receiveOrderPayment, settleOrder
+  deliverOrder, completeOrder, startProduceOrder, finishProduceOrder, receiveOrderPayment, settleOrder,
+  getOrderRemarkList, saveOrderRemark, printOrders as printOrdersApi
 } from '@/api/sales/order'
+import { getWorkOrderDetail } from '@/api/production/workorder'
+import { renderWorkOrdersHtml, renderSalesOrderHtml } from '@/utils/cuttingSheetRenderer'
 import { ORDER_STATUS, FINANCE_STATUS, ORDER_TYPES, statusTag, financeTag, type SalesOrder } from '@/types/sales'
 
 const router = useRouter()
@@ -270,35 +351,150 @@ const page = reactive({ pageNum: 1, pageSize: 20 })
 const dateRange = ref<[string, string] | null>(null)
 const search = reactive({
   orderNo: '', customerName: '', orderType: undefined as string | undefined,
-  orderStatus: undefined as number | undefined, financeStatus: undefined as number | undefined
+  orderStatus: undefined as number | undefined, printFlag: undefined as number | undefined,
+  financeStatus: undefined as number | undefined
 })
+// 订单状态 tabs（整体统一样式）
+const statusTab = ref('')
+const onTabStatus = () => {
+  search.orderStatus = statusTab.value === '' ? undefined : Number(statusTab.value)
+  page.pageNum = 1
+  loadTable()
+}
+
+// ---------------- 批量打印（打印即开工） ----------------
+const checkedIds = ref<number[]>([])
+const printing = ref(false)
+const onCheck = (row: SalesOrder, checked: boolean) => {
+  const id = row.orderId!
+  const idx = checkedIds.value.indexOf(id)
+  if (checked && idx === -1) checkedIds.value.push(id)
+  if (!checked && idx !== -1) checkedIds.value.splice(idx, 1)
+}
+
+/** 批量打印选中订单：后端拆单生成工单并标记已打印/开工，前端合并渲染生产单 */
+const printSelected = async () => {
+  const ids = [...checkedIds.value]
+  if (!ids.length) { ElMessage.warning('请先勾选要打印的订单'); return }
+  printing.value = true
+  try {
+    const res: any = await printOrdersApi(ids)
+    if (res.code !== 200) {
+      ElMessage.error(res.msg || '打印接口调用失败')
+      return
+    }
+    const list: any[] = res.data || []
+    const okList = list.filter((x: any) => x.success && x.workId)
+    const failList = list.filter((x: any) => !x.success)
+    if (failList.length) {
+      ElMessage.warning(`${failList.length} 张订单打印失败：${failList.map((x: any) => x.orderNo || x.orderId).join('、')}（${failList[0]?.msg || ''}）`)
+    }
+    if (!okList.length) return
+    // 逐个拉工单详情，合并成一份可打印文档（每单分页）
+    const details: any[] = []
+    for (const x of okList) {
+      const d: any = await getWorkOrderDetail(x.workId)
+      if (d.code === 200) details.push(d.data)
+    }
+    if (!details.length) { ElMessage.error('工单详情加载失败，无法打印'); return }
+    const html = await renderWorkOrdersHtml(details, `批量生产单-${details.length}张`)
+    const win = window.open('', '_blank')
+    if (!win) { ElMessage.warning('浏览器拦截了弹窗，请允许弹窗后重试'); return }
+    win.document.write(html)
+    win.document.close()
+    win.focus()
+    setTimeout(() => {
+      // 打印/取消后自动关闭打印窗口，避免残留空白窗口干扰操作
+      try { win.onafterprint = () => win.close() } catch { /* 忽略 */ }
+      win.print()
+    }, 300)
+    checkedIds.value = []
+    ElMessage.success(`已打印 ${details.length} 张订单，订单已开工`)
+    loadTable()
+  } catch (e) {
+    console.error('[批量打印] 失败', e)
+    ElMessage.error('批量打印失败：' + (e as any)?.message)
+  } finally {
+    printing.value = false
+  }
+}
 
 const orderTypeOptions = ORDER_TYPES
 const money = (v?: number) => (Number(v) || 0).toFixed(2)
 const percent = (v?: number) => `${((Number(v) || 0) * 100).toFixed(2)}%`
+import { fmtTime } from '@/utils/time'
 
-// 列设置
-const optionalCols = [
-  { key: 'customerName', label: '客户' },
-  { key: 'terminalAddress', label: '终端地址' },
-  { key: 'logistics', label: '物流' },
-  { key: 'unit', label: '单位' },
-  { key: 'orderType', label: '订单类型' },
-  { key: 'orderStatus', label: '状态' },
-  { key: 'financeStatus', label: '财务状态' },
-  { key: 'totalArea', label: '总面积' },
-  { key: 'totalAmount', label: '销售金额' },
-  { key: 'receiveAmount', label: '已付金额' },
-  { key: 'unpaidAmount', label: '未付金额' },
-  { key: 'profitAmount', label: '利润' },
-  { key: 'contact', label: '联系方式' },
-  { key: 'salesman', label: '业务员' },
-  { key: 'remark', label: '备注' },
-  { key: 'orderDate', label: '下单时间' },
-  { key: 'expectDate', label: '计划交货' }
-]
-const visibleCols = ref<string[]>(optionalCols.map(c => c.key))
-const show = (key: string) => visibleCols.value.includes(key)
+// ---------------- 详情行内展开（点详情在订单下方展开） ----------------
+const expandedId = ref<number | null>(null)
+const detailTab = ref('info')
+const isExpanded = (row: SalesOrder) => row.orderId === expandedId.value
+
+/** 时间统一展示 yyyy-MM-dd HH:mm:ss（全局工具，见 utils/time.ts） */
+// 已由全局 fmtTime 提供，此处不再重复定义
+
+/** 加载订单备注记录 */
+const loadRemarks = async (row: any) => {
+  row._remarksLoading = true
+  try {
+    const res: any = await getOrderRemarkList(row.orderId!)
+    row._remarks = res.code === 200 ? res.data || [] : []
+  } catch (e) {
+    console.error(e)
+    row._remarks = []
+  } finally {
+    row._remarksLoading = false
+  }
+}
+
+/** 添加工作人员备注 */
+// 添加备注：弹出输入框（确认/取消），保存后记录操作人姓名与时间
+const addRemark = async (row: any) => {
+  let value = ''
+  try {
+    const r = await ElMessageBox.prompt('请输入备注内容（保存后记录操作人姓名与时间）', '添加备注', {
+      confirmButtonText: '确认',
+      cancelButtonText: '取消',
+      inputType: 'textarea',
+      inputPlaceholder: '填写工作人员备注',
+      inputValidator: (v: string) => (v && v.trim() ? true : '备注内容不能为空')
+    })
+    value = (r.value || '').trim()
+  } catch (e) {
+    return // 用户取消
+  }
+  row._remarkSaving = true
+  try {
+    const res: any = await saveOrderRemark({ orderId: row.orderId!, remark: value })
+    if (res.code === 200) {
+      ElMessage.success('备注已添加')
+      await loadRemarks(row)
+    }
+  } finally {
+    row._remarkSaving = false
+  }
+}
+
+const toggleDetail = async (row: SalesOrder) => {
+  // 已展开：收起
+  if (expandedId.value === row.orderId) {
+    expandedId.value = null
+    return
+  }
+  // 未加载过详情：先拉取订单详情（含产品明细/金额），只加载一次
+  if (!row._detail) {
+    try {
+      const res: any = await getOrderInfo(row.orderId!)
+      if (res.code === 200) (row as any)._detail = res.data
+    } catch (e) {
+      console.error(e)
+      ElMessage.error('订单详情加载失败')
+      return
+    }
+    // 同时加载备注记录（展开时只需一次，后续增删本地刷新）
+    loadRemarks(row as any)
+  }
+  expandedId.value = row.orderId!
+}
 
 const loadTable = async () => {
   loading.value = true
@@ -312,6 +508,8 @@ const loadTable = async () => {
     if (res.code === 200) {
       tableData.value = res.data.records || []
       total.value = Number(res.data.total) || 0
+      // 列表刷新后收起已展开的详情
+      expandedId.value = null
     } else {
       ElMessage.error(res.msg || '查询失败')
     }
@@ -327,7 +525,9 @@ const onReset = () => {
   search.customerName = ''
   search.orderType = undefined
   search.orderStatus = undefined
+  search.printFlag = undefined
   search.financeStatus = undefined
+  statusTab.value = ''
   dateRange.value = null
   page.pageNum = 1
   loadTable()
@@ -336,18 +536,6 @@ const onReset = () => {
 const goCreate = () => router.push('/sales/order/edit')
 const goEdit = (row: SalesOrder) => router.push({ path: '/sales/order/edit', query: { orderId: row.orderId } })
 const canEdit = (row: SalesOrder) => [0, 6].includes(Number(row.orderStatus))
-
-// 详情
-const detailVisible = ref(false)
-const detail = reactive<any>({ itemList: [] })
-const viewDetail = async (row: SalesOrder) => {
-  const res: any = await getOrderInfo(row.orderId!)
-  if (res.code === 200) {
-    Object.keys(detail).forEach(k => delete (detail as any)[k])
-    Object.assign(detail, res.data, { itemList: res.data.itemList || [] })
-    detailVisible.value = true
-  }
-}
 
 // 受理 / 驳回
 const onPass = (row: any) => {
@@ -397,9 +585,29 @@ const submitPay = async () => {
   }
 }
 
+/** 打印销售单：读取订单详情 → 用 SALES_ORDER 模板渲染（与生产单同一套渲染器） */
+const printSales = async (row: any) => {
+  try {
+    const res: any = await getOrderInfo(row.orderId)
+    if (res.code !== 200 || !res.data) { ElMessage.error('订单详情加载失败'); return }
+    const html = await renderSalesOrderHtml(res.data, `销售单-${row.orderNo || ''}`)
+    const win = window.open('', '_blank')
+    if (!win) { ElMessage.warning('浏览器拦截了弹窗，请允许弹窗后重试'); return }
+    win.document.write(html)
+    win.document.close()
+    win.focus()
+    setTimeout(() => {
+      try { win.onafterprint = () => win.close() } catch { /* 忽略 */ }
+      win.print()
+    }, 300)
+  } catch (e) {
+    console.error('[打印销售单] 失败', e)
+    ElMessage.error('打印失败：' + (e as any)?.message)
+  }
+}
+
 // 更多操作
-const onCommand = (cmd: string, row: any) => {
-  const id = row.orderId
+const onCommand = (cmd: string, row: any) => {  const id = row.orderId
   const simple = (fn: () => Promise<any>, text: string) => {
     ElMessageBox.confirm(`确认${text}订单「${row.orderNo}」？`, text, { type: 'warning' })
       .then(async () => {
@@ -408,6 +616,9 @@ const onCommand = (cmd: string, row: any) => {
       }).catch(() => {})
   }
   switch (cmd) {
+    case 'printSales':
+      printSales(row)
+      break
     case 'receive':
       openPay(row)
       break
@@ -446,17 +657,120 @@ onMounted(loadTable)
 <style scoped>
 .sales-page { padding: 12px; }
 .search-card :deep(.el-card__body) { padding: 12px 12px 0; }
+.status-tabs { margin: 6px 0 0; }
+.status-tabs :deep(.el-tabs__header) { margin-bottom: 6px; }
 .table-card { margin-top: 10px; }
 .table-card :deep(.el-card__body) { padding: 10px 12px; }
-.toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
 .toolbar-left { display: flex; align-items: center; gap: 8px; }
-.toolbar-right { display: flex; gap: 8px; }
 .tip { font-size: 12px; color: #909399; margin-left: 6px; }
-.pager { margin-top: 10px; display: flex; justify-content: flex-end; }
+.pager { margin-top: 12px; display: flex; justify-content: flex-end; }
+
+/* ---------- 订单卡片列表（仿物流详情模板） ---------- */
+.order-list { display: flex; flex-direction: column; gap: 10px; }
+.order-card {
+  border: 1px solid #e4e7ed;
+  border-radius: 6px;
+  background: #fff;
+  overflow: hidden;
+  transition: box-shadow 0.2s;
+}
+.order-card:hover { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06); }
+.order-card.expanded { border-color: #409eff; box-shadow: 0 2px 10px rgba(64, 158, 255, 0.15); }
+
+/* 信息栏：每格独立展示，留白不挤压 */
+.order-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  background: #fafbfc;
+  border-bottom: 1px solid #e4e7ed;
+}
+.head-cell {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 96px;
+  padding: 8px 12px;
+  border-right: 1px dashed #ebeef5;
+  gap: 2px;
+}
+.cell-label {
+  font-size: 11px;
+  color: #909399;
+  line-height: 1.2;
+}
+.cell-value {
+  font-size: 13px;
+  color: #303133;
+  line-height: 1.4;
+  word-break: break-all;
+}
+.cell-value b { color: #303133; }
+
+.seq { font-size: 15px; font-weight: 600; color: #409eff; }
+.seq-line { display: inline-flex; align-items: center; gap: 6px; }
+.print-time { display: block; font-size: 11px; color: #909399; }
+.order-no-cell { min-width: 168px; }
+.sub-tag { margin-left: 4px; vertical-align: middle; }
+.addr-cell { min-width: 200px; flex: 1 1 auto; }
+.addr { max-width: 240px; white-space: normal; word-break: break-all; overflow-wrap: anywhere; }
+.money-cell { min-width: 170px; background: #f7faff; }
+.money { color: #303133; }
+.unpaid { display: block; font-size: 12px; color: #f56c6c; }
+
+.head-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 10px;
+  margin-left: auto;
+  background: #fff;
+}
+
+/* ---------- 展开详情 ---------- */
+.order-detail {
+  padding: 12px 14px;
+  background: #fff;
+  border-top: 1px solid #e4e7ed;
+  /* 详情区限高：订单备注/报工流水再多也不撑爆页面，超出可滚动查看 */
+  max-height: 70vh;
+  overflow-y: auto;
+}
+.detail-loading { padding: 24px 0; text-align: center; color: #909399; font-size: 13px; }
+.order-detail :deep(.el-tabs__header) { margin-bottom: 10px; }
+.order-detail :deep(.el-table) { margin-top: 4px; }
+
 .sum-box { border: 1px solid #ebeef5; border-radius: 4px; padding: 6px 14px; background: #fafafa; }
 .sum-row { display: flex; justify-content: space-between; line-height: 26px; font-size: 13px; }
 .sum-total { border-top: 1px dashed #dcdfe6; margin-top: 4px; padding-top: 4px; font-size: 14px; }
 .price { color: #f56c6c; }
 .text-danger { color: #f56c6c; }
-:deep(.el-checkbox) { width: 92px; margin-right: 8px; }
+
+/* ---------- 备注信息（工作人员备注） ---------- */
+.remark-wrap { max-width: 860px; }
+.remark-order {
+  border: 1px solid #f0c4a2;
+  background: #fdf6ef;
+  border-radius: 4px;
+  padding: 8px 12px;
+  margin-bottom: 14px;
+}
+.remark-order-label { font-size: 12px; color: #b06f2a; font-weight: 600; margin-bottom: 4px; }
+.remark-order-text { font-size: 13px; color: #303133; line-height: 1.6; white-space: pre-line; word-break: break-all; }
+.remark-record-label { font-size: 12px; color: #909399; margin-bottom: 8px; }
+.remark-list { display: flex; flex-direction: column; gap: 8px; min-height: 40px; }
+.remark-empty { padding: 14px 0; text-align: center; color: #c0c4cc; font-size: 13px; }
+.remark-item {
+  border: 1px solid #ebeef5;
+  border-left: 3px solid #409eff;
+  border-radius: 4px;
+  padding: 8px 12px;
+  background: #fafbfc;
+}
+.remark-item-head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+.remark-name { font-size: 12px; font-weight: 600; color: #409eff; }
+.remark-time { font-size: 12px; color: #909399; }
+.remark-item-text { font-size: 13px; color: #303133; line-height: 1.6; white-space: pre-wrap; }
+.remark-add { margin-top: 14px; }
 </style>

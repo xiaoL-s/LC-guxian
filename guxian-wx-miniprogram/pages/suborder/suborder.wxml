@@ -1,0 +1,62 @@
+<view class="suborder-page">
+  <!-- 工单信息卡 -->
+  <view class="work-card" wx:if="{{work}}">
+    <view class="work-head">
+      <view class="work-no">工单号：{{work.workNo}}</view>
+      <view class="work-tag">{{work.workStatusDesc}}</view>
+    </view>
+    <view class="work-row">
+      <text class="work-label">客户</text>
+      <text class="work-value">{{work.customerName || '—'}}</text>
+    </view>
+    <view class="work-row" wx:if="{{procStat}}">
+      <text class="work-label">当前产品当前工序已报</text>
+      <text class="work-value">{{procStat.reported}} 件</text>
+    </view>
+    <view class="work-row" wx:if="{{procStat}}">
+      <text class="work-label">剩余可报</text>
+      <text class="work-value highlight">{{procStat.remain}} 件</text>
+    </view>
+    <view class="clear-btn" bindtap="clearWork">× 清除</view>
+  </view>
+
+  <!-- 扫码入口 -->
+  <view class="scan-box" bindtap="scan">
+    <view class="scan-icon">▣</view>
+    <view class="scan-text">扫描工序</view>
+    <view class="scan-desc">点击扫描订单上的二维码</view>
+  </view>
+
+  <!-- 选择与报工 -->
+  <view class="form-card">
+    <view class="form-title">报工产品 <text class="form-tip">（一个订单多个产品，分别报工分别计价）</text></view>
+    <picker mode="selector" range="{{itemNames}}" value="{{itemIndex}}" bindchange="onItemChange">
+      <view class="picker-box">
+        <text wx:if="{{itemNames[itemIndex]}}">{{itemNames[itemIndex]}}</text>
+        <text wx:else class="ph-text">请先扫码选择工单</text>
+        <text class="arrow">▾</text>
+      </view>
+    </picker>
+
+    <view class="form-title">工序 <text class="form-tip">（已完成工序会自动跳过）</text></view>
+    <picker mode="selector" range="{{processNames}}" value="{{procIndex}}" bindchange="onProcChange">
+      <view class="picker-box">
+        <text wx:if="{{processNames[procIndex]}}">{{processNames[procIndex]}}</text>
+        <text wx:else class="ph-text">请选择工序</text>
+        <text class="arrow">▾</text>
+      </view>
+    </picker>
+
+    <view class="form-title">完成数量</view>
+    <view class="num-box">
+      <view class="num-btn" bindtap="onNum" data-op="minus">−</view>
+      <input class="num-input" type="number" value="{{qualifiedNum}}" bindinput="onNum" />
+      <view class="num-btn" bindtap="onNum" data-op="plus">＋</view>
+    </view>
+    <view class="num-tip">该产品该工序最多报该产品数量（当前剩余 {{procStat ? procStat.remain : '扫码后显示'}} 件）</view>
+
+    <button class="submit-btn" bindtap="submit" loading="{{submitting}}" disabled="{{submitting || !work}}">
+      确认报工
+    </button>
+  </view>
+</view>

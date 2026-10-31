@@ -16,7 +16,7 @@
       </el-row>
     </el-card>
     <!-- 表格 -->
-    <el-card style="margin-top:16px">
+    <el-card style="margin-top:10px">
       <el-table :data="tableData" border stripe ref="tableRef"
         @selection-change="handleSelectionChange"
       >
@@ -87,6 +87,7 @@
 </template>
 
 <script setup lang="ts">
+defineOptions({ name: 'RoleManage' })
 
 import { ref,reactive } from 'vue'
 import { getRolePage,saveRole,deleteRole,getMenuIds,getMenuTree } from '@/api/system/role'

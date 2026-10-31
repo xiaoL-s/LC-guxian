@@ -48,21 +48,24 @@ public class TCustomerServiceImpl extends ServiceImpl<TCustomerMapper, TCustomer
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void saveCustomer(TCustomerDTO dto) {
+    public Long saveCustomer(TCustomerDTO dto) {
         TCustomer customer = new TCustomer();
         customer.setCustomerId(dto.getCustomerId());
         customer.setCustomerName(dto.getCustomerName());
-        customer.setContact(dto.getContact());
-        customer.setPhone(dto.getPhone());
-        customer.setAddress(dto.getAddress());
-        customer.setRemark(dto.getRemark());
+        // 空字段给默认值，避免仅传客户名下单时因 NOT NULL 无默认值导致插入失败
+        customer.setContact(dto.getContact() == null ? "" : dto.getContact());
+        customer.setPhone(dto.getPhone() == null ? "" : dto.getPhone());
+        customer.setAddress(dto.getAddress() == null ? "" : dto.getAddress());
+        customer.setRemark(dto.getRemark() == null ? "" : dto.getRemark());
 
         if (dto.getCustomerId() == null) {
-            //新增
+            //新增：保存后返回新客户ID（供下单页自动创建客户后直接关联订单）
             this.save(customer);
+            return customer.getCustomerId();
         } else {
             //编辑
             this.updateById(customer);
+            return dto.getCustomerId();
         }
     }
 }

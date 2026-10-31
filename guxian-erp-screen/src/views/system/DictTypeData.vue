@@ -1,5 +1,5 @@
 <template>
-  <div class="dict-wrap" style="display:flex;gap:12px;height:calc(100vh - 170px)">
+  <div class="dict-wrap" style="display:flex;gap:10px;height:calc(100vh - 130px)">
     <!-- 左侧：字典类型列表（对应截图左侧产品分类） -->
     <el-card style="width:280px;overflow:auto;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
@@ -11,7 +11,7 @@
         size="small" style="margin-bottom:10px"
         @keyup.enter="loadDictType"
       />
-      <el-scrollbar height="calc(100vh - 240px)">
+      <el-scrollbar height="calc(100vh - 210px)">
         <div v-for="item in typeList" :key="item.id"
              class="type-item"
              :class="{active: selectedTypeId === item.id}"
@@ -49,15 +49,15 @@
       </div>
       <el-table v-if="currentDictType" :data="dataTable" border stripe style="flex:1;overflow:auto;">
         <el-table-column prop="id" label="ID" width="70"/>
-        <el-table-column prop="dictLabel" label="标签名称" min-width="150"/>
-        <el-table-column prop="dictValue" label="字典值" width="90"/>
-        <el-table-column label="公式" width="100" align="center">
+        <el-table-column prop="dictLabel" label="标签名称" min-width="220"/>
+        <el-table-column prop="dictValue" label="字典值" min-width="120"/>
+        <el-table-column label="公式" width="110" align="center">
           <template #default="scope">
             <el-tag v-if="scope.row.formulaConfig" type="success" effect="plain" size="small">已配置</el-tag>
             <span v-else class="dash">—</span>
           </template>
         </el-table-column>
-        <el-table-column label="创建时间" prop="createTime" width="170"></el-table-column>
+        <el-table-column label="创建时间" prop="createTime" min-width="180"></el-table-column>
         <el-table-column label="操作" width="190">
           <template #default="scope">
             <el-button text type="primary" @click="openEditData(scope.row)">编辑</el-button>
@@ -140,6 +140,7 @@
 </template>
 
 <script setup lang="ts">
+defineOptions({ name: 'DictTypeData' })
 import { ref, reactive, onMounted } from 'vue'
 import { getDictTypePage, addDictType, updateDictType, delDictType, getDictTypeInfo,
          getDictDataPage, addDictData, updateDictData, delDictData, getDictDataInfo } from '@/api/system/dict'

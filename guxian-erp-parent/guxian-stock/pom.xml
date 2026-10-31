@@ -35,6 +35,12 @@
             <artifactId>guxian-common-mybatis</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <!-- Redis缓存公共模块 -->
+        <dependency>
+            <groupId>com.guxian</groupId>
+            <artifactId>guxian-common-redis</artifactId>
+            <version>${project.version}</version>
+        </dependency>
         <!-- OpenAPI文档 -->
         <dependency>
             <groupId>com.github.xiaoymin</groupId>
@@ -61,6 +67,25 @@
             <groupId>org.mybatis</groupId>
             <artifactId>mybatis-spring</artifactId>
             <version>3.0.4</version>
+        </dependency>
+            <!-- Nacos服务注册发现 -->
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
+        </dependency>
+            <!-- 全链路日志追踪（Micrometer Tracing + Zipkin） -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-tracing-bridge-brave</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.zipkin.reporter2</groupId>
+            <artifactId>zipkin-reporter-brave</artifactId>
+        </dependency>
+            <!-- actuator：激活 Micrometer Tracing / Observation 自动配置（全链路日志追踪必需） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
     </dependencies>
 

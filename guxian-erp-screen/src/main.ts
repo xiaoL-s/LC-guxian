@@ -10,9 +10,10 @@ import './style.css'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 
 const app = createApp(App)
-// 挂载，全局启用中文
+// 挂载，全局启用中文；size 统一为 small —— 让全站控件默认紧凑，减少无效留白
 app.use(ElementPlus, {
-  locale: zhCn
+  locale: zhCn,
+  size: 'small'
 })
 app.use(pinia)
 app.use(router)

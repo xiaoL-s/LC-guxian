@@ -1,7 +1,73 @@
-.login { padding: 80rpx 40rpx; background: #f5f7fa; min-height: 100vh; }
-.title { font-size: 48rpx; font-weight: bold; text-align: center; color: #1989fa; }
-.subtitle { font-size: 28rpx; text-align: center; color: #666; margin: 16rpx 0 60rpx; }
-.card { background: #fff; border-radius: 16rpx; padding: 40rpx; }
-.input { border: 1rpx solid #ddd; border-radius: 8rpx; padding: 20rpx; margin-bottom: 30rpx; }
-.btn { margin-top: 20rpx; }
-.tip { font-size: 22rpx; color: #999; text-align: center; margin-top: 30rpx; }
+.login-page {
+  min-height: 100vh;
+  background: linear-gradient(160deg, #1989fa 0%, #5ac8fa 60%, #d6f3ff 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40rpx;
+  box-sizing: border-box;
+}
+.login-card {
+  width: 100%;
+  max-width: 560rpx;
+  background: #fff;
+  border-radius: 32rpx;
+  padding: 60rpx 50rpx 70rpx;
+  box-shadow: 0 16rpx 48rpx rgba(25, 137, 250, 0.25);
+  box-sizing: border-box;
+}
+.logo {
+  text-align: center;
+  font-size: 44rpx;
+  font-weight: 700;
+  color: #1989fa;
+}
+.logo-sub {
+  text-align: center;
+  font-size: 24rpx;
+  color: #999;
+  margin: 12rpx 0 50rpx;
+}
+.field {
+  margin-bottom: 34rpx;
+}
+.field-label {
+  font-size: 28rpx;
+  color: #333;
+  margin-bottom: 12rpx;
+}
+.field-input {
+  background: #f5f7fa;
+  border-radius: 16rpx;
+  padding: 24rpx 28rpx;
+  font-size: 30rpx;
+}
+.ph {
+  color: #bbb;
+}
+.login-btn {
+  margin-top: 20rpx;
+  background: #1989fa;
+  color: #fff;
+  border-radius: 48rpx;
+  font-size: 32rpx;
+  letter-spacing: 8rpx;
+}
+.login-btn[disabled] {
+  background: #9ad0fa;
+  color: #fff;
+}
+.net-entry {
+  margin-top: 40rpx;
+  text-align: center;
+  font-size: 26rpx;
+  color: #1989fa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6rpx;
+  padding: 12rpx;
+}
+.net-icon {
+  font-size: 28rpx;
+}

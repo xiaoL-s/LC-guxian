@@ -62,6 +62,9 @@ public class SysOperLogServiceImpl extends ServiceImpl<SysOperLogMapper, SysOper
             }
         }
 
+        // 按操作时间倒序：最新操作排在最前面
+        wrapper.orderByDesc(SysOperLog::getOperTime);
+
         IPage<SysOperLog> logPage = baseMapper.selectPage(page, wrapper);
         Page<SysOperLogDTO> dtoPage = new Page<>();
         dtoPage.setTotal(logPage.getTotal());

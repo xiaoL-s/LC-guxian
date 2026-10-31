@@ -1,0 +1,157 @@
+.suborder-page {
+  min-height: 100vh;
+  background: #f5f7fa;
+  padding: 30rpx;
+  box-sizing: border-box;
+}
+.work-card {
+  background: linear-gradient(135deg, #1989fa, #5ac8fa);
+  border-radius: 28rpx;
+  padding: 34rpx 36rpx;
+  margin-bottom: 28rpx;
+  color: #fff;
+  position: relative;
+  box-shadow: 0 10rpx 30rpx rgba(25, 137, 250, 0.2);
+}
+.work-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20rpx;
+}
+.work-no {
+  font-size: 32rpx;
+  font-weight: 700;
+}
+.work-tag {
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 999rpx;
+  font-size: 22rpx;
+  padding: 6rpx 20rpx;
+}
+.work-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 26rpx;
+  margin-top: 10rpx;
+}
+.work-label {
+  color: rgba(255, 255, 255, 0.8);
+}
+.work-value {
+  font-weight: 600;
+}
+.work-value.highlight {
+  color: #ffe27a;
+  font-size: 30rpx;
+}
+.clear-btn {
+  position: absolute;
+  top: 24rpx;
+  right: 24rpx;
+  font-size: 22rpx;
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(0, 0, 0, 0.12);
+  border-radius: 999rpx;
+  padding: 6rpx 18rpx;
+}
+.scan-box {
+  background: #fff;
+  border-radius: 28rpx;
+  padding: 60rpx 30rpx;
+  text-align: center;
+  margin-bottom: 28rpx;
+  border: 2rpx dashed #cfe4fb;
+  box-sizing: border-box;
+}
+.scan-icon {
+  font-size: 72rpx;
+  color: #1989fa;
+  line-height: 1;
+}
+.scan-text {
+  font-size: 34rpx;
+  color: #1989fa;
+  font-weight: 700;
+  margin-top: 18rpx;
+}
+.scan-desc {
+  font-size: 24rpx;
+  color: #999;
+  margin-top: 8rpx;
+}
+.form-card {
+  background: #fff;
+  border-radius: 28rpx;
+  padding: 34rpx 36rpx 44rpx;
+}
+.form-title {
+  font-size: 28rpx;
+  color: #333;
+  font-weight: 600;
+  margin-bottom: 16rpx;
+}
+.form-tip {
+  font-size: 22rpx;
+  color: #999;
+  font-weight: 400;
+}
+.picker-box {
+  background: #f5f7fa;
+  border-radius: 16rpx;
+  padding: 26rpx 28rpx;
+  font-size: 30rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 30rpx;
+}
+.ph-text {
+  color: #bbb;
+}
+.arrow {
+  color: #999;
+}
+.num-box {
+  display: flex;
+  align-items: center;
+  background: #f5f7fa;
+  border-radius: 16rpx;
+  padding: 12rpx;
+}
+.num-btn {
+  width: 88rpx;
+  height: 88rpx;
+  border-radius: 16rpx;
+  background: #fff;
+  color: #1989fa;
+  font-size: 48rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.06);
+}
+.num-input {
+  flex: 1;
+  text-align: center;
+  font-size: 44rpx;
+  font-weight: 700;
+  color: #333;
+}
+.num-tip {
+  font-size: 22rpx;
+  color: #999;
+  margin-top: 16rpx;
+}
+.submit-btn {
+  margin-top: 40rpx;
+  background: #1989fa;
+  color: #fff;
+  border-radius: 48rpx;
+  font-size: 32rpx;
+  letter-spacing: 4rpx;
+}
+.submit-btn[disabled] {
+  background: #9ad0fa;
+  color: #fff;
+}

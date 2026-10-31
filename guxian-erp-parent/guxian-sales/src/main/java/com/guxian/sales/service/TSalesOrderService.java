@@ -63,6 +63,13 @@ public interface TSalesOrderService extends IService<TSalesOrder> {
     /** 保存后工单生成情况提示（新增订单自动拆单后调用；无工单时提示手动开工补齐） */
     String checkWorkOrderTip(Long orderId);
 
+    /**
+     * 批量打印订单（打印即开工）：
+     * 对每个未打印订单：调用生产模块拆单生成工单（工单号=订单号）→ 标记已打印 → 订单状态置为生产中。
+     * 返回 {@link PrintResult} 列表供前端逐个渲染打印。
+     */
+    List<Map<String, Object>> printOrders(List<Long> orderIds);
+
     /** 删除订单：校验工单/业务流程后，先删明细再逻辑删订单 */
     void deleteOrder(Long orderId);
 }

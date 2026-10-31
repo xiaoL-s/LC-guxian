@@ -55,11 +55,35 @@ public class TWorkOrderController {
         return Result.success(workOrderService.getDetail(workId));
     }
 
+    /** 扫码报工信息（小程序扫码后获取工单+数量上限） */
+    @GetMapping("/scanInfo")
+    public Result<Map<String, Object>> scanInfo(@RequestParam("workId") Long workId) {
+        return Result.success(workOrderService.scanInfo(workId));
+    }
+
     /** 工序报工 */
     @OperLog(operModule = "生产报工", operContent = "工序报工计件")
     @PostMapping("/report")
     public Result<Void> report(@RequestBody WorkReportDTO dto) {
         workOrderService.reportProcess(dto);
+        return Result.success();
+    }
+
+    /** 撤回报工（仅超级管理员）：撤销指定产品行指定工序的报工 */
+    @OperLog(operModule = "生产工单", operContent = "撤回报工")
+    @PostMapping("/revokeReport")
+    public Result<Void> revokeReport(@RequestParam("workId") Long workId,
+                                     @RequestParam("itemId") Long itemId,
+                                     @RequestParam("processId") Long processId) {
+        workOrderService.revokeReport(workId, itemId, processId);
+        return Result.success();
+    }
+
+    /** 撤回完工入库（仅超级管理员）：删除入库单，工单/订单回生产中 */
+    @OperLog(operModule = "生产工单", operContent = "撤回完工入库")
+    @PostMapping("/revokeFinish")
+    public Result<Void> revokeFinish(@RequestParam("workId") Long workId) {
+        workOrderService.revokeFinish(workId);
         return Result.success();
     }
 

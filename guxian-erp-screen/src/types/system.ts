@@ -16,4 +16,6 @@ export interface LoginUser {
   id: number
   username: string
   realName: string
+  /** 是否超级管理员：生产工单撤回等高风险操作仅超管可用 */
+  isAdmin?: boolean
 }

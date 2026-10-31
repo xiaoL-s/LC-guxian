@@ -19,6 +19,8 @@ public class SalesOrderQueryVO {
     private String customerName;
     /** 订单状态 */
     private Integer orderStatus;
+    /** 打印状态：0未打印 1已打印 */
+    private Integer printFlag;
     /** 财务状态 */
     private Integer financeStatus;
     /** 订单类型 */

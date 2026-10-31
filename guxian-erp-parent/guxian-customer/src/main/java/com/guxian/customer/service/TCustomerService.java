@@ -10,5 +10,6 @@ import com.guxian.customer.vo.TCustomerQueryVO;
 public interface TCustomerService extends IService<TCustomer> {
 
     IPage<TCustomerDTO> pageCustomer(Page<TCustomer> page, String customerName, String phone);
-    void saveCustomer(TCustomerDTO dto);
+    /** 新增/编辑客户；新增时返回新客户ID，编辑时返回原ID */
+    Long saveCustomer(TCustomerDTO dto);
 }

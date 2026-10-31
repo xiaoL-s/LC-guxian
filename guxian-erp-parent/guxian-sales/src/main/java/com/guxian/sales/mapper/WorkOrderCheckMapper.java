@@ -19,4 +19,8 @@ public interface WorkOrderCheckMapper {
     /** 订单最新工单号（拆单成功提示用） */
     @Select("SELECT work_no FROM t_work_order WHERE sales_order_id = #{orderId} AND del_flag = 0 ORDER BY work_id DESC LIMIT 1")
     String latestWorkNo(@Param("orderId") Long orderId);
+
+    /** 订单最新工单ID */
+    @Select("SELECT work_id FROM t_work_order WHERE sales_order_id = #{orderId} AND del_flag = 0 ORDER BY work_id DESC LIMIT 1")
+    Long workIdBySalesOrderId(@Param("orderId") Long orderId);
 }

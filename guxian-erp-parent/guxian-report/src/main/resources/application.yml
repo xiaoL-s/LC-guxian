@@ -1,0 +1,55 @@
+spring:
+  application:
+    name: guxian-report
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 127.0.0.1:8848
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      password: ${REDIS_PASSWORD:}
+      database: 0
+      timeout: 5s
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+  # 数据库配置（与生产模块共用 guxian-erp 库）
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:3306/guxian-erp?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:root}
+
+server:
+  port: 8088
+  address: 0.0.0.0
+
+# MyBatis-Plus配置
+mybatis-plus:
+  mapper-locations: classpath:mapper/**/*.xml
+  type-aliases-package: com.guxian.report.entity
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      logic-delete-field: delFlag
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+# 全链路日志追踪（Micrometer Tracing + Zipkin，traceId 贯穿所有微服务）
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: http://127.0.0.1:9411/api/v2/spans
+
+logging:
+  pattern:
+    level: "%5p [${spring.application.name:-},%X{traceId:-},%X{spanId:-}]"

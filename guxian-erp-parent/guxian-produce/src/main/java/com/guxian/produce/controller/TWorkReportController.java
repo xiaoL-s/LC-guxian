@@ -27,8 +27,10 @@ public class TWorkReportController {
                                                    @RequestParam(required = false) Long workOrderId,
                                                    @RequestParam(required = false) Long workerId,
                                                    @RequestParam(required = false) Long processId,
-                                                   @RequestParam(required = false) String keyword) {
-        return Result.success(workReportService.pageReport(new Page<>(pageNum, pageSize), workOrderId, workerId, processId, keyword));
+                                                   @RequestParam(required = false) String keyword,
+                                                   @RequestParam(required = false) String dateFrom,
+                                                   @RequestParam(required = false) String dateTo) {
+        return Result.success(workReportService.pageReport(new Page<>(pageNum, pageSize), workOrderId, workerId, processId, keyword, dateFrom, dateTo));
     }
 
     /** 计件工资汇总 */

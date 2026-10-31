@@ -24,6 +24,12 @@ public class TWorkProcessRecord {
     /** 工序ID */
     private Long processId;
 
+    /** 订单明细行ID（同一工单多产品，防重复按 工单+产品行+工序） */
+    private Long itemId;
+
+    /** 产品名称（冗余） */
+    private String productName;
+
     /** 工序编码 */
     private String processCode;
 

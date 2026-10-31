@@ -18,4 +18,8 @@ public interface SysUserReadMapper {
 
     @Select("SELECT id, username, real_name AS realName FROM sys_user WHERE id = #{userId}")
     Map<String, Object> selectUser(@Param("userId") Long userId);
+
+    /** 查询用户角色串（用于超级管理员权限判定，roles 含"超级管理员"或系统内置 id=1） */
+    @Select("SELECT roles FROM sys_user WHERE id = #{userId} AND del_flag = 0")
+    String selectRoles(@Param("userId") Long userId);
 }

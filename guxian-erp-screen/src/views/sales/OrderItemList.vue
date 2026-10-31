@@ -31,6 +31,11 @@
         <el-button type="primary" size="small" @click="onSearch">查询</el-button>
         <el-button size="small" @click="onReset">重置</el-button>
       </div>
+      <!-- 订单状态（tabs 样式，整体统一） -->
+      <el-tabs v-model="statusTab" class="status-tabs" size="small" @tab-change="onTabStatus">
+        <el-tab-pane label="全部" name="" />
+        <el-tab-pane v-for="s in ORDER_STATUS" :key="s.code" :label="s.label" :name="String(s.code)" />
+      </el-tabs>
     </el-card>
 
     <!-- 明细列表 -->
@@ -71,7 +76,7 @@
       </div>
 
       <el-table :data="tableData" v-loading="loading" border stripe size="small"
-        height="calc(100vh - 330px)" :row-class-name="rowClass"
+        height="calc(100vh - 280px)" :row-class-name="rowClass"
         :header-cell-style="{ background: '#f5f7fa', color: '#303133', fontSize: '12px', padding: '4px 0' }"
         :cell-style="{ padding: '2px 0', fontSize: '12px' }">
         <el-table-column type="index" label="#" width="42" align="center" fixed />
@@ -231,6 +236,7 @@
 </template>
 
 <script setup lang="ts">
+defineOptions({ name: 'OrderItemList' })
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -254,6 +260,13 @@ const search = reactive({
   dateFrom: '' as string,
   dateTo: '' as string
 })
+// 订单状态 tabs（整体统一样式）
+const statusTab = ref('')
+const onTabStatus = () => {
+  search.orderStatus = statusTab.value === '' ? undefined : Number(statusTab.value)
+  page.pageNum = 1
+  loadAll()
+}
 
 const stats = reactive<SalesOrderStats>({ totalNum: 0, totalArea: 0, totalAmount: 0, totalUnpaid: 0, totalReceive: 0, totalRows: 0 })
 const categoryOptions = ref<string[]>([])
@@ -335,6 +348,7 @@ const onSearch = () => { page.pageNum = 1; loadAll() }
 const onReset = () => {
   search.keyword = ''
   search.orderStatus = undefined
+  statusTab.value = ''
   search.financeStatus = undefined
   search.itemCategory = undefined
   quickRange.value = 'recent2m'
@@ -394,6 +408,8 @@ onMounted(async () => {
 <style scoped>
 .sales-page { padding: 12px; }
 .search-card :deep(.el-card__body) { padding: 10px 12px; }
+.status-tabs { margin: 6px 0 0; }
+.status-tabs :deep(.el-tabs__header) { margin-bottom: 6px; }
 .search-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .prepend { font-size: 12px; color: #606266; }
 .table-card { margin-top: 10px; }

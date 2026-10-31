@@ -30,13 +30,17 @@ public class TWorkReportServiceImpl extends ServiceImpl<TWorkReportMapper, TWork
     private TWorkOrderMapper workOrderMapper;
     @Resource
     private com.guxian.produce.mapper.SysUserReadMapper sysUserReadMapper;
+    @Resource
+    private com.guxian.produce.mapper.SalesOrderReadMapper salesOrderReadMapper;
 
     @Override
-    public IPage<Map<String, Object>> pageReport(Page<Map<String, Object>> page, Long workOrderId, Long workerId, Long processId, String keyword) {
+    public IPage<Map<String, Object>> pageReport(Page<Map<String, Object>> page, Long workOrderId, Long workerId, Long processId, String keyword, String dateFrom, String dateTo) {
         LambdaQueryWrapper<TWorkReport> w = new LambdaQueryWrapper<>();
         w.eq(workOrderId != null, TWorkReport::getWorkOrderId, workOrderId);
         w.eq(workerId != null, TWorkReport::getWorkerId, workerId);
         w.eq(processId != null, TWorkReport::getProcessId, processId);
+        w.ge(StringUtils.hasText(dateFrom), TWorkReport::getReportTime, dateFrom + " 00:00:00");
+        w.le(StringUtils.hasText(dateTo), TWorkReport::getReportTime, dateTo + " 23:59:59");
         // 按工单号模糊：先按关键字匹配工单ID集合，再过滤报工记录
         if (StringUtils.hasText(keyword)) {
             List<TWorkOrder> orders = workOrderMapper.selectList(new LambdaQueryWrapper<TWorkOrder>()
@@ -58,16 +62,36 @@ public class TWorkReportServiceImpl extends ServiceImpl<TWorkReportMapper, TWork
             row.put("id", r.getId());
             row.put("workOrderId", r.getWorkOrderId());
             row.put("processId", r.getProcessId());
+            row.put("itemId", r.getItemId());
+            row.put("productName", r.getProductName() == null ? "" : r.getProductName());
             row.put("workerId", r.getWorkerId());
+            String workerName = "";
+            if (r.getWorkerId() != null) {
+                Map<String, Object> user = sysUserReadMapper.selectUser(r.getWorkerId());
+                if (user != null && user.get("realName") != null) {
+                    workerName = user.get("realName").toString();
+                }
+            }
+            row.put("workerName", workerName);
             row.put("qualifiedNum", r.getQualifiedNum());
             row.put("badNum", r.getBadNum());
             row.put("unitPrice", r.getUnitPrice());
             row.put("pieceWage", r.getPieceWage());
+            row.put("remark", r.getRemark() == null ? "" : r.getRemark());
             row.put("reportTime", r.getReportTime() == null ? "" : r.getReportTime().toString());
+            row.put("updateTime", r.getUpdateTime() == null ? "" : r.getUpdateTime().toString());
             TProcessDict proc = processDictMapper.selectById(r.getProcessId());
             row.put("processName", proc == null ? "" : proc.getProcessName());
             TWorkOrder wo = workOrderMapper.selectById(r.getWorkOrderId());
             row.put("workNo", wo == null ? "" : wo.getWorkNo());
+            String customerName = "";
+            if (wo != null && wo.getSalesOrderId() != null) {
+                Map<String, Object> header = salesOrderReadMapper.selectOrderHeader(wo.getSalesOrderId());
+                if (header != null && header.get("customerName") != null) {
+                    customerName = header.get("customerName").toString();
+                }
+            }
+            row.put("customerName", customerName);
             rows.add(row);
         }
         Page<Map<String, Object>> voPage = new Page<>(rp.getCurrent(), rp.getSize(), rp.getTotal());

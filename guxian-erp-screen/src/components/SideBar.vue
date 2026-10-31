@@ -93,29 +93,29 @@ const onMenuClick = (item: any) => {
     router.push(item.path)
   }
 }
-
-console.log("iconMap keys：", Object.keys(iconMap))
 </script>
 
 <style scoped lang="scss">
 .sidebar {
   width: var(--gx-sidebar-w, 180px);
   height: 100vh;
-  padding: 20px 12px;
+  padding: 16px 10px;
   box-sizing: border-box;
-  background: linear-gradient(180deg, #223040 0%, #2c3e50 100%);
-  color: #ecf0f1;
+  background: #e9f3fe;
+  border-right: 1px solid #d6e6f7;
+  color: #303133;
   overflow-y: auto;
   overflow-x: hidden; /* ✅关键，横向溢出隐藏 */
   font-family: "PingFang SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
   /* ✅调整动画时间+缓动曲线 */
   transition: width 0.34s cubic-bezier(0.2, 0, 0.2, 1);
+  box-shadow: 1px 0 4px rgba(0, 0, 0, 0.04);
 
   &::-webkit-scrollbar {
     width: 5px;
   }
   &::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.12);
+    background: rgba(0, 0, 0, 0.12);
     border-radius: 4px;
   }
   &::-webkit-scrollbar-track {
@@ -125,37 +125,39 @@ console.log("iconMap keys：", Object.keys(iconMap))
   /* 收缩模式 */
   &.collapse {
     width: 64px;
-    padding: 20px 8px;
+    padding: 16px 6px;
   }
 }
 
 .menu-item {
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 
   .menu-title {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 12px 16px;
-    border-radius: 10px;
+    padding: 11px 14px;
+    border-radius: 8px;
     cursor: pointer;
     transition: 0.22s ease;
 
     &:hover {
-      background: rgba(255, 255, 255, 0.07);
+      background: #dcebfd;
+      color: #1c6cd4;
     }
   }
 
   .menu-icon {
     font-size: 17px;
-    margin-right: 5px;
+    margin-right: 6px;
+    color: #4a7ab5;
     flex-shrink: 0;
   }
 
   .menu-text {
     flex: 1;
     font-weight: 500;
-    font-size: 13px;
+    font-size: 13.5px;
     letter-spacing: 0.2px;
     margin-right: 6px;
     white-space: nowrap; /* ✅禁止文字换行 */
@@ -166,7 +168,7 @@ console.log("iconMap keys：", Object.keys(iconMap))
 
   .arrow {
     font-size: 11px;
-    color: #a0aebf;
+    color: #a8b0bc;
     transition: transform 0.28s ease;
     flex-shrink: 0;
     &.expand {
@@ -177,7 +179,7 @@ console.log("iconMap keys：", Object.keys(iconMap))
   /* 收缩状态 */
   :deep(.collapse) & .menu-title {
     justify-content: center;
-    padding: 12px 0;
+    padding: 11px 0;
   }
   :deep(.collapse) & .menu-icon {
     margin-right: 0;
@@ -193,19 +195,19 @@ console.log("iconMap keys：", Object.keys(iconMap))
 }
 
 .sub-menu {
-  margin: 6px 0 10px 14px;
+  margin: 4px 0 8px 14px;
   padding-left: 14px;
-  border-left: 1px solid rgba(208, 219, 208, 0.473);
+  border-left: 1px solid #c9dcf2;
 
   .sub-item {
     display: flex;
     align-items: center;
-    padding: 10px 14px;
-    margin-bottom: 4px;
-    border-radius: 9px;
-    color: #b0c2d6;
+    padding: 9px 14px;
+    margin-bottom: 3px;
+    border-radius: 8px;
+    color: #606266;
     text-decoration: none;
-    font-size: 12.6px;
+    font-size: 13px;
     transition: all 0.22s ease;
 
     .sub-icon {
@@ -215,13 +217,14 @@ console.log("iconMap keys：", Object.keys(iconMap))
     }
 
     &:hover {
-      background: rgba(255, 255, 255, 0.06);
-      color: #ffffff;
+      background: #dcebfd;
+      color: #1c6cd4;
     }
 
     &.active {
-      color: #ffffff;
-      background: rgba(64, 158, 255, 0.22);
+      color: #1c6cd4;
+      background: #cfe6ff;
+      font-weight: 600;
       box-shadow: 0 1px 6px rgba(64, 158, 255, 0.15);
     }
   }

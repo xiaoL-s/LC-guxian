@@ -1,0 +1,36 @@
+<view class="index-page">
+  <view class="user-card">
+    <view class="avatar">{{realName[0] || '工'}}</view>
+    <view class="user-info">
+      <view class="user-name">{{realName || '工人'}}</view>
+      <view class="user-post">{{postType || '计件工人'}}</view>
+    </view>
+  </view>
+
+  <view class="menu-list">
+    <view class="menu-item" bindtap="goProduce">
+      <view class="menu-icon">生</view>
+      <view class="menu-text">
+        <view class="menu-title">生产</view>
+        <view class="menu-desc">扫码报工 · 我的收入</view>
+      </view>
+      <view class="menu-arrow">›</view>
+    </view>
+    <view class="menu-item" bindtap="openNetSetting">
+      <view class="menu-icon">⚙</view>
+      <view class="menu-text">
+        <view class="menu-title">网络设置</view>
+        <view class="menu-desc">换WiFi后修改电脑IP</view>
+      </view>
+      <view class="menu-arrow">›</view>
+    </view>
+    <view class="menu-item" bindtap="logout">
+      <view class="menu-icon logout">退</view>
+      <view class="menu-text">
+        <view class="menu-title">登出</view>
+        <view class="menu-desc">退出当前账号</view>
+      </view>
+      <view class="menu-arrow">›</view>
+    </view>
+  </view>
+</view>

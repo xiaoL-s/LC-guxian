@@ -1,22 +1,3 @@
-// 产品档案
-export interface TProduct {
-  productId?: number
-  productCode: string
-  productName: string
-  productType?: string
-  spec?: string
-  unit?: string
-  unitPrice?: number
-  priceType?: number // 1按面积 2按件
-  minArea?: number
-  defaultColor?: string
-  defaultMaterial?: string
-  openDirection?: string
-  status?: number
-  remark?: string
-  createTime?: string
-}
-
 // 字典下拉选项（产品来自字典管理 style_* 系列）
 export interface DictOption {
   dictType: string
@@ -127,6 +108,10 @@ export interface SalesOrder {
   orderNo?: string
   orderStatus?: number
   orderStatusDesc?: string
+  /** 打印状态：0未打印 1已打印（打印生产单后订单才开工并进生产列表） */
+  printFlag?: number
+  /** 打印时间 */
+  printTime?: string
   orderType?: string
 
   customerId?: number

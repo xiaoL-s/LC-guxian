@@ -66,13 +66,21 @@ public class TSalesOrderController {
 
     // ==================== 录入 ====================
 
-    /** 新增/编辑订单（保存为订单未受理；新增自动拆单，返回工单生成提示） */
+    /** 新增/编辑订单（保存为订单已受理，未打印前不生成生产工单） */
     @PostMapping("/save")
     @OperLog(operModule = "销售订单", operType = "保存", operContent = "新增/编辑销售订单")
     public Result<String> save(@RequestBody SalesOrderDTO dto) {
         orderService.saveOrder(dto);
-        // 新增订单自动拆单：返回工单生成情况，前端按此提示（拆单失败不再静默）
-        return Result.success(orderService.checkWorkOrderTip(dto.getOrderId()));
+        return Result.success("订单已保存，请到订单列表勾选打印生成生产单后开工");
+    }
+
+    // ==================== 打印 ====================
+
+    /** 批量打印订单（打印即开工）：拆单生成工单 + 标记已打印 + 订单状态=生产中 */
+    @PostMapping("/print")
+    @OperLog(operModule = "销售订单", operType = "打印", operContent = "批量打印订单（打印即开工）")
+    public Result<List<Map<String, Object>>> print(@RequestBody List<Long> orderIds) {
+        return Result.success(orderService.printOrders(orderIds));
     }
 
     // ==================== 状态流转 ====================

@@ -1,0 +1,51 @@
+.produce-page {
+  min-height: 100vh;
+  background: #f5f7fa;
+  padding: 40rpx 30rpx;
+  box-sizing: border-box;
+}
+.produce-card {
+  display: flex;
+  align-items: center;
+  background: #fff;
+  border-radius: 28rpx;
+  padding: 44rpx 36rpx;
+  margin-bottom: 28rpx;
+  box-shadow: 0 6rpx 20rpx rgba(0, 0, 0, 0.04);
+}
+.p-icon {
+  width: 96rpx;
+  height: 96rpx;
+  border-radius: 24rpx;
+  font-size: 40rpx;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.p-icon.orange {
+  background: #fff3e0;
+  color: #ff9800;
+}
+.p-icon.green {
+  background: #e8f8ef;
+  color: #07c160;
+}
+.p-text {
+  flex: 1;
+  margin-left: 26rpx;
+}
+.p-title {
+  font-size: 34rpx;
+  color: #333;
+  font-weight: 600;
+}
+.p-desc {
+  font-size: 24rpx;
+  color: #999;
+  margin-top: 8rpx;
+}
+.p-arrow {
+  font-size: 44rpx;
+  color: #ccc;
+}

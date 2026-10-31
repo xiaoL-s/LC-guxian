@@ -5,31 +5,40 @@
         <el-form-item label="工单号">
           <el-input v-model="search.keyword" placeholder="工单号" clearable style="width:160px" @keyup.enter="onSearch" />
         </el-form-item>
-        <el-form-item label="状态">
-          <el-select v-model="search.workStatus" placeholder="全部" clearable style="width:120px">
-            <el-option v-for="s in WORK_STATUS" :key="s.value" :label="s.label" :value="s.value" />
-          </el-select>
-        </el-form-item>
         <el-form-item>
           <el-button type="primary" @click="onSearch">查询</el-button>
           <el-button @click="onReset">重置</el-button>
           <el-button type="primary" @click="splitVisible = true">拆单生成工单</el-button>
         </el-form-item>
       </el-form>
+      <!-- 状态切换（tabs 样式） -->
+      <el-tabs v-model="search.workStatus" class="status-tabs" @tab-change="onSearch">
+        <el-tab-pane label="全部" name="" />
+        <el-tab-pane v-for="s in WORK_STATUS" :key="s.value" :label="s.label" :name="s.value" />
+      </el-tabs>
     </el-card>
 
     <el-card shadow="never" class="table-card">
       <el-table :data="tableData" v-loading="loading" border stripe size="small">
-        <el-table-column label="工单号" prop="workNo" width="150" />
-        <el-table-column label="客户" prop="customerName" min-width="120" show-overflow-tooltip />
-        <el-table-column label="总面积(㎡)" prop="totalArea" width="90" align="right" />
+        <el-table-column type="selection" width="45" align="center" />
+        <el-table-column label="工单号" prop="workNo" width="140" />
+        <el-table-column label="客户" prop="customerName" min-width="100" show-overflow-tooltip />
+        <el-table-column label="产品" prop="productNames" min-width="150" show-overflow-tooltip />
+        <el-table-column label="总面积(㎡)" prop="totalArea" width="85" align="right" />
         <el-table-column label="状态" width="90" align="center">
           <template #default="s">
             <el-tag :type="statusTag(s.row.workStatus)" size="small">{{ statusDesc(s.row.workStatus) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="完工时间" prop="finishTime" width="160" />
-        <el-table-column label="制单时间" prop="createTime" width="160" />
+        <el-table-column label="完工时间" width="145">
+          <template #default="s">{{ fmtTime(s.row.finishTime) }}</template>
+        </el-table-column>
+        <el-table-column label="制单时间" width="145">
+          <template #default="s">{{ fmtTime(s.row.createTime) }}</template>
+        </el-table-column>
+        <el-table-column label="更新时间" width="145">
+          <template #default="s">{{ fmtTime(s.row.updateTime) }}</template>
+        </el-table-column>
         <el-table-column label="操作" width="130" fixed="right">
           <template #default="s">
             <el-button size="small" type="primary" link @click="viewDetail(s.row)">详情/操作</el-button>
@@ -74,7 +83,7 @@
     </el-dialog>
 
     <!-- 工单详情/操作 -->
-    <el-dialog v-model="detailVisible" :title="`工单 ${detail.workNo || ''}`" width="960px" destroy-on-close>
+    <el-dialog v-model="detailVisible" :title="`工单 ${detail.workNo || ''}`" width="1020px" destroy-on-close>
       <template v-if="detail.workId">
         <el-descriptions :column="4" border size="small">
           <el-descriptions-item label="工单号">{{ detail.workNo }}</el-descriptions-item>
@@ -85,8 +94,8 @@
           </el-descriptions-item>
           <el-descriptions-item label="总面积">{{ detail.totalArea }} ㎡</el-descriptions-item>
           <el-descriptions-item label="货架">{{ detail.shelfName || '—' }}</el-descriptions-item>
-          <el-descriptions-item label="制单时间">{{ detail.createTime }}</el-descriptions-item>
-          <el-descriptions-item label="完工时间">{{ detail.finishTime || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="制单时间">{{ fmtTime(detail.createTime) }}</el-descriptions-item>
+          <el-descriptions-item label="完工时间">{{ fmtTime(detail.finishTime) }}</el-descriptions-item>
           <el-descriptions-item label="当前阶段" :span="2">
             <el-tag type="warning" size="small">{{ currentStage }}</el-tag>
           </el-descriptions-item>
@@ -105,41 +114,25 @@
             </el-table>
           </el-tab-pane>
 
-          <!-- 工序报工 -->
-          <el-tab-pane label="工序报工">
-            <el-table :data="detail.processList" border stripe size="small">
-              <el-table-column label="排序" prop="processSort" width="60" align="center" />
-              <el-table-column label="工序" prop="processName" min-width="110" />
-              <el-table-column label="单价(元/件)" prop="unitPrice" width="100" align="right" />
-              <el-table-column label="状态" width="90" align="center">
-                <template #default="s">
-                  <el-tag :type="s.row.done ? 'success' : 'info'" size="small">{{ s.row.done ? '已完成' : '未报工' }}</el-tag>
-                </template>
-              </el-table-column>
-              <el-table-column label="报工人" prop="operUsername" width="100" />
-              <el-table-column label="操作" width="100">
-                <template #default="s">
-                  <el-button v-if="!s.row.done" size="small" type="primary" link
-                    @click="openReport(s.row)">报工</el-button>
-                </template>
-              </el-table-column>
-            </el-table>
-            <div v-if="detail.workStatus === 'WAIT_PROCESS'" style="margin-top:8px" class="tip-box">
-              提示：工单待生产，首次报工将自动进入「生产中」。
-            </div>
-          </el-tab-pane>
-
-          <!-- 报工记录 -->
+          <!-- 报工记录（按扫码流水格式：序号/产品/工序/员工/数量/时间/备注；金额统计见财务模块） -->
           <el-tab-pane label="报工记录">
             <el-table :data="detail.reportList" border stripe size="small">
-              <el-table-column label="时间" prop="reportTime" width="160" />
-              <el-table-column label="工序" prop="processName" width="110" />
-              <el-table-column label="工人ID" prop="workerId" width="80" align="center" />
-              <el-table-column label="合格数" prop="qualifiedNum" width="80" align="center" />
-              <el-table-column label="不良数" prop="badNum" width="80" align="center" />
-              <el-table-column label="单价" prop="unitPrice" width="90" align="right" />
-              <el-table-column label="计件工资" width="110" align="right">
-                <template #default="s"><b>￥{{ fmt(s.row.pieceWage) }}</b></template>
+              <el-table-column type="index" label="#" width="40" align="center" />
+              <el-table-column label="产品" prop="productName" min-width="120" show-overflow-tooltip />
+              <el-table-column label="工序" prop="processName" width="100" />
+              <el-table-column label="员工" prop="workerName" width="90" show-overflow-tooltip />
+              <el-table-column label="合格数" prop="qualifiedNum" width="70" align="center" />
+              <el-table-column label="创建时间" width="150">
+                <template #default="s">{{ fmtTime(s.row.reportTime) }}</template>
+              </el-table-column>
+              <el-table-column label="更新时间" width="150">
+                <template #default="s">{{ fmtTime(s.row.updateTime) }}</template>
+              </el-table-column>
+              <el-table-column label="备注" prop="remark" min-width="100" show-overflow-tooltip />
+              <el-table-column v-if="isAdmin" label="操作" width="70" align="center">
+                <template #default="s">
+                  <el-button size="small" type="danger" link @click="revokeOne(s.row)">撤回</el-button>
+                </template>
               </el-table-column>
             </el-table>
           </el-tab-pane>
@@ -150,40 +143,13 @@
           <template v-if="detail.workStatus !== 'FINISHED'">
             <el-button size="small" type="success" @click="openFinish">完工入库</el-button>
           </template>
+          <el-button v-if="isAdmin && detail.workStatus === 'FINISHED'" size="small" type="warning" @click="undoFinish">撤回完工入库</el-button>
         </div>
-      </template>
-    </el-dialog>
-
-    <!-- 报工弹窗 -->
-    <el-dialog v-model="reportVisible" title="工序报工" width="480px" destroy-on-close>
-      <el-form label-width="90px" size="small">
-        <el-form-item label="工序">
-          <el-input :model-value="reportRow.processName" disabled />
-        </el-form-item>
-        <el-form-item label="工人" required>
-          <el-select v-model="reportForm.workerId" filterable placeholder="选择工人" style="width:100%">
-            <el-option v-for="u in users" :key="u.id" :label="u.realName" :value="u.id" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="合格数量" required>
-          <el-input-number v-model="reportForm.qualifiedNum" :min="0" :controls="false" style="width:100%" />
-        </el-form-item>
-        <el-form-item label="不良数量">
-          <el-input-number v-model="reportForm.badNum" :min="0" :controls="false" style="width:100%" />
-        </el-form-item>
-        <el-form-item label="备注">
-          <el-input v-model="reportForm.remark" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button size="small" @click="reportVisible = false">取消</el-button>
-        <el-button size="small" type="primary" @click="submitReport">提交报工</el-button>
       </template>
     </el-dialog>
 
     <!-- 完工入库弹窗 -->
     <el-dialog v-model="finishVisible" title="完工入库" width="460px" destroy-on-close>
-      <el-alert title="系统将校验全部工序已完成，生成成品入库单，并自动回写销售订单状态为「已完工」" type="info" :closable="false" style="margin-bottom:10px" />
       <el-form label-width="90px" size="small">
         <el-form-item label="入库货架">
           <el-select v-model="finishShelfId" placeholder="选择货架" style="width:100%">
@@ -203,21 +169,29 @@
 </template>
 
 <script setup lang="ts">
+defineOptions({ name: 'WorkOrderList' })
 import { ref, reactive, computed } from 'vue'
 import {
   getWorkOrderPage, getAuditedOrders, splitWorkOrder, getWorkOrderDetail,
-  reportProcess, finishInstock, getUsers
+  finishInstock, revokeReport, revokeFinish
 } from '@/api/production/workorder'
 import { getShelfEnabled } from '@/api/stock/material'
 import { WORK_STATUS, type WorkOrder } from '@/types/production'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { renderWorkOrderHtml } from '@/utils/cuttingSheetRenderer'
+import { fmtTime } from '@/utils/time'
 
 const loading = ref(false)
 const tableData = ref<any[]>([])
 const total = ref(0)
 const page = reactive({ pageNum: 1, pageSize: 10 })
-const search = reactive({ keyword: '', workStatus: undefined as string | undefined })
+const search = reactive({ keyword: '', workStatus: '' as string })
+// 是否超级管理员：撤回等高危操作仅超管可见可点
+const isAdmin = ref(false)
+try {
+  const u = localStorage.getItem('loginUser')
+  if (u) isAdmin.value = !!(JSON.parse(u)?.isAdmin)
+} catch { /* 忽略解析异常 */ }
 
 const loadTable = async () => {
   loading.value = true
@@ -228,7 +202,7 @@ const loadTable = async () => {
 }
 loadTable()
 const onSearch = () => { page.pageNum = 1; loadTable() }
-const onReset = () => { search.keyword = ''; search.workStatus = undefined; page.pageNum = 1; loadTable() }
+const onReset = () => { search.keyword = ''; search.workStatus = ''; page.pageNum = 1; loadTable() }
 const fmt = (v: any) => (Number(v) || 0).toFixed(2)
 const statusDesc = (s: string) => WORK_STATUS.find(x => x.value === s)?.label || s
 const statusTag = (s: string) => {
@@ -300,28 +274,6 @@ const viewDetail = async (row: any) => {
   }
 }
 
-// 报工
-const reportVisible = ref(false)
-const reportRow = reactive<any>({})
-const reportForm = reactive({ workerId: undefined as number | undefined, qualifiedNum: 1, badNum: 0, remark: '' })
-const users = ref<any[]>([])
-const openReport = (row: any) => {
-  Object.assign(reportRow, row)
-  reportForm.workerId = undefined
-  reportForm.qualifiedNum = 1
-  reportForm.badNum = 0
-  reportForm.remark = ''
-  reportVisible.value = true
-}
-const submitReport = async () => {
-  if (!reportForm.workerId) { ElMessage.warning('请选择工人'); return }
-  if (reportForm.qualifiedNum <= 0 && reportForm.badNum <= 0) { ElMessage.warning('合格与不良不能同时为0'); return }
-  const res = await reportProcess({
-    workId: detail.workId, processId: reportRow.processId, ...reportForm
-  })
-  if (res.code === 200) { ElMessage.success('报工成功'); reportVisible.value = false; viewDetail({ workId: detail.workId }) }
-}
-
 // 完工入库
 const finishVisible = ref(false)
 const finishShelfId = ref<number | undefined>()
@@ -345,6 +297,41 @@ const submitFinish = async () => {
   } catch (e) { console.error(e) } finally { finishing.value = false }
 }
 
+// ============ 撤回操作（仅超级管理员） ============
+// 撤回报工：撤销该产品行该工序的报工记录与流水，回到未完成状态
+const revokeOne = (row: any) => {
+  if (!row?.processId) return
+  if (!row?.itemId) {
+    // 改造前的历史整体报工：无产品归属，无法按产品单独撤回，由系统统一清理
+    ElMessage.warning('该记录为改造前的历史报工（无产品归属），不支持界面撤回')
+    return
+  }
+  ElMessageBox.confirm(
+    `确定撤回「${row.productName || ''} · ${row.processName || '该工序'}」的报工记录吗？\n撤回后该工序重新变为未完成，工人对应计件工资同步撤销。`,
+    '撤回报工', { type: 'warning', confirmButtonText: '确认撤回', cancelButtonText: '取消' }
+  ).then(async () => {
+    const res = await revokeReport(detail.workId, row.itemId, row.processId)
+    if (res.code === 200) {
+      ElMessage.success('已撤回报工')
+      viewDetail({ workId: detail.workId })
+    }
+  }).catch(() => {})
+}
+// 撤回完工入库：删除入库单，工单/订单回生产中
+const undoFinish = () => {
+  ElMessageBox.confirm(
+    '确定撤回该工单的「完工入库」吗？\n将删除成品入库单，工单回到生产中，销售订单同步回到生产中。',
+    '撤回完工入库', { type: 'warning', confirmButtonText: '确认撤回', cancelButtonText: '取消' }
+  ).then(async () => {
+    const res = await revokeFinish(detail.workId)
+    if (res.code === 200) {
+      ElMessage.success('已撤回完工入库')
+      loadTable()
+      viewDetail({ workId: detail.workId })
+    }
+  }).catch(() => {})
+}
+
 // ============ 打印生产单 ============
 // 与「系统管理 → 打印模板管理」共用同一套模板：按 templateType=WORK_ORDER + isDefault 读取，
 // 渲染逻辑在 @/utils/cuttingSheetRenderer（唯一入口 renderWorkOrderHtml），
@@ -359,7 +346,11 @@ const onPrintCutting = async () => {
     win.document.write(html)
     win.document.close()
     win.focus()
-    setTimeout(() => win.print(), 300)
+    setTimeout(() => {
+      // 打印/取消后自动关闭打印窗口，避免残留空白窗口干扰操作
+      try { win.onafterprint = () => win.close() } catch { /* 忽略 */ }
+      win.print()
+    }, 300)
   } catch (e) {
     console.error('[打印] 渲染失败', e)
     ElMessage.error('打印模板渲染失败，请检查打印模板管理中的模板内容')
@@ -368,8 +359,6 @@ const onPrintCutting = async () => {
 
 const init = async () => {
   loadShelves()
-  const u = await getUsers()
-  if (u.code === 200) users.value = u.data
 }
 init()
 </script>
@@ -377,6 +366,8 @@ init()
 <style scoped>
 .produce-page { padding: 12px; }
 .search-card :deep(.el-card__body) { padding: 12px 12px 0; }
+.status-tabs { margin: 6px 0 0; }
+.status-tabs :deep(.el-tabs__header) { margin-bottom: 6px; }
 .table-card { margin-top: 10px; }
 .table-card :deep(.el-card__body) { padding: 12px; }
 .pager { margin-top: 10px; display: flex; justify-content: flex-end; }

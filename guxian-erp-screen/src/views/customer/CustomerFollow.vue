@@ -5,7 +5,7 @@
       <el-row :gutter="20">
         <el-col :span="16">
           <div class="page-title">
-            客户跟进记录
+            客户跟进
             <el-select v-model="customerId" filterable clearable placeholder="全部客户" style="width: 220px"
               @change="onCustomerChange">
               <el-option v-for="c in customers" :key="c.customerId" :label="c.customerName" :value="c.customerId" />
@@ -20,7 +20,7 @@
     </el-card>
 
     <!-- 表格 -->
-    <el-card style="margin-top:16px">
+    <el-card style="margin-top:10px">
       <el-table v-loading="loading" :data="tableData" border stripe>
         <el-table-column label="客户" prop="customerName" width="160" show-overflow-tooltip>
           <template #default="scope">{{ customerNameOf(scope.row.customerId) }}</template>
@@ -70,6 +70,7 @@
 </template>
 
 <script setup lang="ts">
+defineOptions({ name: 'CustomerFollow' })
 import { ref, reactive, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { getFollowPage, saveFollow, delFollow } from '@/api/customer/follow'

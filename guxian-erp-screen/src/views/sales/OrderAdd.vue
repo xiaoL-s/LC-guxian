@@ -21,10 +21,13 @@
           </el-col>
           <el-col :span="6">
             <el-form-item label="客户姓名" required>
-              <el-select v-model="order.customerId" filterable clearable placeholder="选择客户" style="width: 100%"
-                @change="onCustomerChange">
+              <el-select v-model="order.customerId" filterable allow-create default-first-option clearable
+                placeholder="选择客户或输入新客户名" style="width: 100%" @change="onCustomerChange">
                 <el-option v-for="c in customers" :key="c.customerId" :label="c.customerName" :value="c.customerId" />
               </el-select>
+              <div v-if="order.customerName && !customers.some(c => c.customerId === order.customerId)" class="new-customer-tip">
+                新客户：{{ order.customerName }}（保存时自动加入系统）
+              </div>
             </el-form-item>
           </el-col>
           <el-col :span="6">
@@ -229,7 +232,7 @@
             </template>
           </el-table-column>
           <el-table-column label="实收金额" width="88" align="right">
-            <template #default="s">{{ money(s.row.receiveAmount ?? 0) }}</template>
+            <template #default="s">{{ money(s.row.receiveAmount ?? s.row.lineAmount ?? 0) }}</template>
           </el-table-column>
         </el-table-column>
 
@@ -244,10 +247,6 @@
           </template>
         </el-table-column>
       </el-table>
-      <div class="scroll-tip">↔ 列较多，可横向拖动滚动条查看全部列</div>
-
-      <el-alert type="info" :closable="false" style="margin-top: 8px"
-        title="宽高单位毫米(mm)；净宽 = 总宽 − 扣宽；单扇面积 = 净宽 × 总高 ÷ 1000000；行金额 = 面积 × 单价（按件时 = 单价 × 数量）。保存时后端按产品字典与上述口径强制复核。" />
     </el-card>
 
     <!-- ============ 费用与合计 ============ -->
@@ -352,7 +351,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getOrderDictOptions, getOrderInfo, saveOrder } from '@/api/sales/order'
-import { getAllCustomerList } from '@/api/customer/customer'
+import { getAllCustomerList, saveCustomer } from '@/api/customer/customer'
 import { testDictFormula } from '@/api/system/dict'
 import { ORDER_TYPES, INSTALL_TYPES, type DictOption } from '@/types/sales'
 
@@ -364,6 +363,26 @@ const saving = ref(false)
 const itemTableRef = ref()
 const selectedRows = ref<any[]>([])
 const currentRowIndex = ref(0)
+
+/** 计算 N 天后的日期（本地时区，格式 yyyy-MM-dd） */
+const addDays = (days: number) => {
+  const d = new Date()
+  d.setDate(d.getDate() + days)
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+/** 加载客户下拉列表 */
+const loadCustomers = async () => {
+  try {
+    const c: any = await getAllCustomerList()
+    if (c.code === 200) customers.value = c.data || []
+  } catch (e) {
+    console.warn('客户列表加载失败（客户服务 8082 未启动？）', e)
+  }
+}
 
 /** 字典选项 */
 const dict = reactive<Record<string, DictOption[]>>({
@@ -428,7 +447,7 @@ const order = reactive<any>({
   orderId: undefined, orderNo: '', customerId: undefined, customerName: '', contact: '', phone: '',
   terminalAddress: '', logistics: '', unit: '套', brand: '', installType: '客户安装',
   designer: '', splitter: '', salesman: '', customerSource: '',
-  orderDate: new Date().toISOString().slice(0, 10), expectDate: '',
+  orderDate: new Date().toISOString().slice(0, 10), expectDate: addDays(7),
   projectionArea: 0, bigBoardNum: 0,
   craftFee: 0, urgentFee: 0, freight: 0, discountAmount: 0, remark: '',
   itemList: [blankItem()]
@@ -510,6 +529,10 @@ const onProductChange = (row: any, val: string) => {
   // 加载产品属性（vars）并预填默认值（如 加杆默认全防护、单价默认110）
   const vars = parseProductVars(opt)
   row._vars = vars
+  // 先重置单价/数量，再按该产品的 vars 带出默认值；
+  // 避免「复制行后更换产品」残留上一个产品的单价/数量（价格按上一个产品算）
+  row.unitPrice = 0
+  row.num = 1
   Object.entries(PROP_ATTR_MAP).forEach(([prop, attrName]) => {
     const v = vars[attrName]
     if (!v || v.def === '') return
@@ -523,13 +546,49 @@ const onProductChange = (row: any, val: string) => {
   calcRow(row)
 }
 
-const onCustomerChange = (cid: number) => {
-  const c = customers.value.find(x => x.customerId === cid)
-  if (c) {
-    order.customerName = c.customerName
-    order.contact = c.contact || ''
-    order.phone = c.phone || ''
-    order.terminalAddress = order.terminalAddress || c.address || ''
+const onCustomerChange = async (val: any) => {
+  // 清空：重置客户信息
+  if (val === undefined || val === null || val === '') {
+    order.customerId = undefined
+    order.customerName = ''
+    order.contact = ''
+    order.phone = ''
+    return
+  }
+  // 数字 = 已在库客户：直接回填客户信息
+  if (typeof val === 'number') {
+    const c = customers.value.find(x => x.customerId === val)
+    if (c) {
+      order.customerName = c.customerName
+      order.contact = c.contact || ''
+      order.phone = c.phone || ''
+      order.terminalAddress = order.terminalAddress || c.address || ''
+    }
+    return
+  }
+  // 字符串 = 输入的新客户名：自动添加到系统，拿回 customerId
+  const name = String(val).trim()
+  if (!name) return
+  try {
+    const res: any = await saveCustomer({ customerName: name } as any)
+    if (res.code === 200) {
+      order.customerId = typeof res.data === 'number' ? res.data : undefined
+      order.customerName = name
+      order.contact = ''
+      order.phone = ''
+      await loadCustomers()
+      // 兜底：若接口未返回ID，按名字从最新列表匹配
+      if (!order.customerId) {
+        const found = customers.value.find(c => c.customerName === name)
+        if (found) order.customerId = found.customerId
+      }
+      ElMessage.success(`新客户「${name}」已自动添加到系统`)
+    } else {
+      ElMessage.error(res.msg || '新客户添加失败')
+    }
+  } catch (e) {
+    console.error(e)
+    ElMessage.error('新客户添加失败，请检查客户服务是否启动')
   }
 }
 
@@ -674,7 +733,7 @@ const resetForm = () => {
     orderId: undefined, orderNo: '', customerId: undefined, customerName: '', contact: '', phone: '',
     terminalAddress: '', logistics: '', unit: '套', brand: '', installType: '客户安装',
     designer: '', splitter: '', salesman: '', customerSource: '',
-    orderDate: new Date().toISOString().slice(0, 10), expectDate: '',
+    orderDate: new Date().toISOString().slice(0, 10), expectDate: addDays(7),
     projectionArea: 0, bigBoardNum: 0, craftFee: 0, urgentFee: 0, freight: 0, discountAmount: 0,
     remark: '', itemList: [blankItem()]
   })
@@ -683,7 +742,11 @@ const resetForm = () => {
 const goBack = () => router.push('/sales/order/entry')
 
 const submit = async () => {
-  if (!order.customerId) { ElMessage.warning('请选择客户'); return }
+  // 客户必须是数字ID（在库客户 或 已自动创建成功的新客户）；杜绝字符串客户名被当ID提交
+  if (!order.customerId || typeof order.customerId !== 'number') {
+    ElMessage.warning('请选择客户，或输入新客户名并等待自动添加成功')
+    return
+  }
   const bad = order.itemList.findIndex((r: any) => !r.productName || !r.width || !r.height)
   if (bad >= 0) { ElMessage.warning(`第 ${bad + 1} 行请完善产品、总宽、总高`); return }
   saving.value = true
@@ -717,12 +780,7 @@ onMounted(async () => {
     Object.keys(dict).forEach(k => { dict[k] = d.data[k] || [] })
   }
   // 客户
-  try {
-    const c: any = await getAllCustomerList()
-    if (c.code === 200) customers.value = c.data || []
-  } catch (e) {
-    console.warn('客户列表加载失败（客户服务 8082 未启动？）', e)
-  }
+  await loadCustomers()
   // 编辑模式
   const oid = route.query.orderId
   if (oid) {
@@ -755,7 +813,7 @@ onMounted(async () => {
 .block-title { font-weight: bold; font-size: 14px; }
 .detail-tools { display: flex; gap: 6px; }
 .cell-text { font-size: 12px; color: #606266; }
-.scroll-tip { margin-top: 6px; font-size: 12px; color: #909399; text-align: center; }
+.new-customer-tip { margin-top: 4px; font-size: 12px; color: #e6a23c; }
 .sum-box { border: 1px solid #ebeef5; border-radius: 4px; padding: 8px 14px; background: #fafafa; }
 .sum-row { display: flex; justify-content: space-between; line-height: 26px; font-size: 13px; }
 .sum-total { border-top: 1px dashed #dcdfe6; margin-top: 4px; padding-top: 4px; font-size: 15px; }

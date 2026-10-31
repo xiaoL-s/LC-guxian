@@ -16,6 +16,9 @@ public class WorkReportDTO {
     /** 工序ID */
     private Long processId;
 
+    /** 订单明细行ID（一个工单多产品时，按产品分别报工计价） */
+    private Long itemId;
+
     /** 报工工人ID */
     private Long workerId;
 

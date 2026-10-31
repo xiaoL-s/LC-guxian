@@ -22,6 +22,12 @@ public class TWorkReport {
     /** 工序ID */
     private Long processId;
 
+    /** 订单明细行ID（一个工单多产品，按产品分别报工计价） */
+    private Long itemId;
+
+    /** 产品名称（冗余，报工统计/展示用） */
+    private String productName;
+
     /** 报工工人ID */
     private Long workerId;
 
@@ -36,6 +42,9 @@ public class TWorkReport {
 
     /** 本次计件工资 = 合格数量*单价 */
     private BigDecimal pieceWage;
+
+    /** 报工备注 */
+    private String remark;
 
     /** 报工提交时间 */
     private LocalDateTime reportTime;

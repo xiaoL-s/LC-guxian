@@ -1,10 +1,25 @@
-<view class="login">
-  <view class="title">固贤纱窗厂</view>
-  <view class="subtitle">车间工人端</view>
+<view class="login-page">
+  <view class="login-card">
+    <view class="logo">固贤纱窗厂</view>
+    <view class="logo-sub">工人计件扫码系统</view>
 
-  <view class="card">
-    <input class="input" type="number" maxlength="11" placeholder="请输入手机号" bindinput="onPhone" value="{{phone}}" />
-    <button class="btn" type="primary" bindtap="login" loading="{{loading}}">登录</button>
-    <view class="tip">首次使用请联系管理员在系统里绑定手机号</view>
+    <view class="field">
+      <view class="field-label">员工姓名</view>
+      <input class="field-input" value="{{name}}" bindinput="onName"
+             placeholder="请输入姓名或登录账号" placeholder-class="ph" />
+    </view>
+
+    <view class="field">
+      <view class="field-label">员工密码</view>
+      <input class="field-input" value="{{password}}" bindinput="onPassword"
+             password placeholder="请输入密码" placeholder-class="ph" />
+    </view>
+
+    <button class="login-btn" bindtap="login" loading="{{loading}}" disabled="{{loading}}">登 录</button>
+
+    <view class="net-entry" bindtap="openNetSetting">
+      <text class="net-icon">⚙</text>
+      <text>网络设置（换WiFi后修改电脑IP）</text>
+    </view>
   </view>
 </view>

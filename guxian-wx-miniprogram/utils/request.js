@@ -28,7 +28,7 @@ function request(path, { method = 'GET', data = {}, auth = true } = {}) {
         }
       },
       fail(err) {
-        wx.showToast({ title: '网络异常', icon: 'none' })
+        wx.showToast({ title: '网络异常，请到登录页「网络设置」检查电脑IP', icon: 'none', duration: 2500 })
         reject(err)
       }
     })
