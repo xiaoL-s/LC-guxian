@@ -114,8 +114,7 @@ const loadTable = async () => {
   const res = await getProcessList()
   if (res.code === 200) tableData.value = res.data
 }
-loadTable()
-
+// loadTable() // 初始不自动加载，点查询才出数据
 const dialogVisible = ref(false)
 const form = ref<ProcessDict>({ processCode: '', processName: '', processSort: 1 })
 const openAdd = () => {

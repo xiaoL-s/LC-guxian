@@ -20,6 +20,8 @@
           </el-breadcrumb>
         </div>
         <div class="header-right">
+          <!-- 主题切换（用户名左侧） -->
+          <ThemeSwitcher />
           <span class="username">👤 {{ loginUser.realName }}</span>
           <el-button text type="danger" @click="handleLogout" class="logout-btn">退出登录</el-button>
         </div>
@@ -41,7 +43,9 @@ import { ref, computed, onMounted, provide } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getUserMenu } from '@/api/system/menu'
 import SideBar from '@/components/SideBar.vue'
+import ThemeSwitcher from '@/components/ThemeSwitcher.vue'
 import BreadcrumbTabs from '@/components/BreadcrumbTabs.vue'
+import { initTheme } from '@/utils/theme'
 
 // ========= 新增侧边栏收缩状态 =========
 const isCollapse = ref(false)
@@ -57,12 +61,14 @@ const crumbs = computed(() => {
 })
 
 /** 多标签 keep-alive 缓存名单（按组件 name 匹配；首页看板常驻缓存） */
-const cachedNames = ref<string[]>(['CsHome'])
+const cachedNames = ref<string[]>(['CsHome', 'OrderAdd'])
 provide('gxCachedNames', cachedNames)
 // 当前登录用户
 const loginUser = ref<any>({})
 
 onMounted(async () => {
+  // 恢复上次选择的主题
+  initTheme()
   // 从localStorage取出登录存储的用户信息（Login登录成功保存进去）
   const userStr = localStorage.getItem('loginUser')
   if(userStr){
@@ -72,7 +78,7 @@ onMounted(async () => {
   const res = await getUserMenu()
   console.log(res.data)
   if(res.code === 200){
-    menuTree.value = res.data.map( m => ({ ...m, _expand: false }))
+    menuTree.value = res.data
   }
 })
 
@@ -80,9 +86,10 @@ const menuTree = ref<any[]>([])
 
 // 退出登录逻辑
 const handleLogout = ()=>{
-  // 清除token、用户信息
+  // 清除token、用户信息、菜单展开状态
   localStorage.removeItem('token')
   localStorage.removeItem('loginUser')
+  localStorage.removeItem('menu_expanded')
   // 跳转到登录页面
   router.push('/login')
 }
@@ -92,7 +99,7 @@ const handleLogout = ()=>{
 .system-layout {
   display: flex;
   height: 100vh;
-  background: #f0f2f5;
+  background: var(--gx-content-bg, #f0f2f5);
 }
 .main-wrap {
   flex: 1;
@@ -102,8 +109,8 @@ const handleLogout = ()=>{
 }
 .top-header {
   height: 56px;
-  background: #ffffff;
-  border-bottom: 1px solid #e4e7ed;
+  background: var(--gx-header-bg, #ffffff);
+  border-bottom: 1px solid var(--gx-header-border, #e4e7ed);
   padding: 0 24px;
   display: flex;
   justify-content: space-between;
@@ -153,7 +160,7 @@ const handleLogout = ()=>{
   /* 内容区是页面唯一留白来源：去掉外边距，页面容器不再叠加 padding */
   padding: 8px 10px 10px;
   overflow: auto;
-  background: #f0f2f5;
+  background: var(--gx-content-bg, #f0f2f5);
   margin: 0;
   border-radius: 0;
   box-shadow: none;

@@ -433,6 +433,19 @@ public class TSalesOrderServiceImpl extends ServiceImpl<TSalesOrderMapper, TSale
             order.setProfitAmount(profitTotal.setScale(2, RoundingMode.HALF_UP));
             order.setGrossProfitRate(rate(profitTotal, order.getTotalAmount()));
             order.setFinanceStatus(FinanceStatusEnum.UNPAID.getCode());
+
+            // 备注里自动记录创建人
+            String operatorName = "系统";
+            try {
+                com.guxian.model.LoginUser loginUser = UserContext.getLoginUser();
+                if (loginUser != null && loginUser.getRealName() != null) {
+                    operatorName = loginUser.getRealName();
+                }
+            } catch (Exception ignored) {}
+            String createLog = "【创建】" + operatorName + " " + java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").format(LocalDateTime.now());
+            String oldRemark = order.getRemark();
+            order.setRemark((oldRemark == null || oldRemark.isEmpty()) ? createLog : oldRemark + " | " + createLog);
+
             baseMapper.insert(order);
             // 回写新订单ID，供调用方（Controller）查询拆单结果提示
             dto.setOrderId(order.getOrderId());
@@ -714,63 +727,65 @@ public class TSalesOrderServiceImpl extends ServiceImpl<TSalesOrderMapper, TSale
             row.put("orderId", order.getOrderId());
             row.put("orderNo", order.getOrderNo());
 
-            // 已打印过：直接返回工单信息，不重复拆单（打印以最后一份为准）
-            if (order.getPrintFlag() != null && order.getPrintFlag() == 1) {
+            // 打印前一律按最新字典公式重算一遍（用户可能刚改了产品公式，订单里存的是旧快照）。
+            // 已打印订单重算失败不阻断（车间可能已在做，沿用旧数据）；未打印订单重算失败直接拦截。
+            boolean alreadyPrinted = order.getPrintFlag() != null && order.getPrintFlag() == 1;
+            try {
+                refreshFormulaBeforePrint(orderId);
+            } catch (BusinessException e) {
+                if (alreadyPrinted) {
+                    log.warn("已打印订单重算公式失败，沿用旧数据：订单={} 原因={}", orderId, e.getMessage());
+                } else {
+                    row.put("success", false);
+                    row.put("msg", "公式重算失败：" + e.getMessage());
+                    result.add(row);
+                    continue;
+                }
+            }
+
+            // 已打印过：直接返回工单信息，不重复拆单（公式已重算，getDetail 实时读新数据）
+            if (alreadyPrinted) {
                 Long workId = workOrderCheckMapper.workIdBySalesOrderId(orderId);
                 row.put("workId", workId);
                 row.put("workNo", workOrderCheckMapper.latestWorkNo(orderId));
                 row.put("success", true);
-                row.put("msg", "已打印过，直接打印");
+                row.put("msg", "已打印过，按最新公式重新打印");
                 result.add(row);
                 continue;
             }
 
-            // 未打印：调用生产模块拆单生成工单（工单号=订单号），拆单成功才算开工
+            // 未打印：直接标记已打印（不拆单，用户不需要生成生产工单）
+            Long existWorkId = 0L;
+            boolean splitAlreadyExists = false;
+
+            // 拆单成功或已存在工单：标记已打印 + 订单状态=生产中（开工），工单号=订单号
+            String operatorName = "系统";
             try {
-                String token = currentToken();
-                HttpClient client = HttpClient.newBuilder()
-                        .connectTimeout(Duration.ofSeconds(5))
-                        .build();
-                HttpRequest.Builder rb = HttpRequest.newBuilder()
-                        .uri(URI.create("http://127.0.0.1:8085/production/workorder/split?salesOrderId=" + orderId))
-                        .timeout(Duration.ofSeconds(15))
-                        .POST(HttpRequest.BodyPublishers.noBody());
-                if (!token.isEmpty()) {
-                    rb.header("Authorization", token);
+                com.guxian.model.LoginUser loginUser = UserContext.getLoginUser();
+                if (loginUser != null && loginUser.getRealName() != null) {
+                    operatorName = loginUser.getRealName();
                 }
-                HttpResponse<String> resp = client.send(rb.build(), HttpResponse.BodyHandlers.ofString());
-                if (resp.statusCode() != 200) {
-                    throw new BusinessException("生产服务拆单失败(HTTP " + resp.statusCode() + ")");
-                }
-                com.fasterxml.jackson.databind.JsonNode node = new com.fasterxml.jackson.databind.ObjectMapper().readTree(resp.body());
-                if (node.path("code").asInt(-1) != 200) {
-                    throw new BusinessException("拆单失败：" + node.path("msg").asText());
-                }
+            } catch (Exception ignored) {}
 
-                // 拆单成功：标记已打印 + 订单状态=生产中（开工），工单号=订单号
-                TSalesOrder upd = new TSalesOrder();
-                upd.setOrderId(orderId);
-                upd.setPrintFlag(1);
-                upd.setPrintTime(LocalDateTime.now());
-                upd.setOrderStatus(OrderStatusEnum.PRODUCING.getCode());
-                baseMapper.updateById(upd);
-                updateItemStatus(orderId, OrderStatusEnum.PRODUCING.getCode(), null);
+            TSalesOrder upd = new TSalesOrder();
+            upd.setOrderId(orderId);
+            upd.setPrintFlag(1);
+            upd.setPrintTime(LocalDateTime.now());
+            upd.setOrderStatus(OrderStatusEnum.PRODUCING.getCode());
 
-                row.put("workId", node.path("data").asLong(0));
-                row.put("workNo", workOrderCheckMapper.latestWorkNo(orderId));
-                row.put("success", true);
-                row.put("msg", "打印成功，订单已开工");
-            } catch (BusinessException e) {
-                row.put("success", false);
-                row.put("msg", e.getMessage());
-            } catch (java.net.ConnectException e) {
-                row.put("success", false);
-                row.put("msg", "生产服务(8085)未启动，请先启动 guxian-produce 模块");
-            } catch (Exception e) {
-                row.put("success", false);
-                row.put("msg", "打印失败：" + e.getMessage());
-            }
-            result.add(row);
+            // 追加打印记录到备注
+            String oldRemark = order.getRemark();
+            String printLog = "【打印】" + operatorName + " " + java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").format(LocalDateTime.now());
+            String newRemark = (oldRemark == null || oldRemark.isEmpty()) ? printLog : oldRemark + " | " + printLog;
+            upd.setRemark(newRemark);
+
+            baseMapper.updateById(upd);
+            updateItemStatus(orderId, OrderStatusEnum.PRODUCING.getCode(), null);
+
+            row.put("workId", existWorkId);
+            row.put("workNo", workOrderCheckMapper.latestWorkNo(orderId));
+            row.put("success", true);
+            row.put("msg", splitAlreadyExists ? "打印成功（工单已存在，重新打印）" : "打印成功，订单已开工");
         }
         return result;
     }
@@ -1148,6 +1163,56 @@ public class TSalesOrderServiceImpl extends ServiceImpl<TSalesOrderMapper, TSale
         } catch (java.io.IOException | InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new BusinessException("调用系统服务公式计算失败：" + e.getMessage());
+        }
+    }
+
+    /**
+     * 打印前按最新产品公式重算一遍下料/剪网/面积/金额。
+     * 背景：保存订单时公式结果已快照进 formula_result；用户事后在字典里改了公式，
+     *       旧订单打印若仍读旧快照，车间会按错误尺寸下料。故打印拆单前重算并回写。
+     * 仅作用于未打印订单；公式失败时记日志并沿用旧结果，不阻断打印（避免改坏字典导致整单卡死）。
+     */
+    private void refreshFormulaBeforePrint(Long orderId) {
+        List<TSalesOrderItem> items = orderItemMapper.selectList(
+                new LambdaQueryWrapper<TSalesOrderItem>().eq(TSalesOrderItem::getOrderId, orderId));
+        for (TSalesOrderItem item : items) {
+            if (!StringUtils.hasText(item.getDictType()) || !StringUtils.hasText(item.getDictValue())) continue;
+            try {
+                Map<String, Object> params = new LinkedHashMap<>();
+                params.put("总宽", nz(item.getWidth()));
+                params.put("总高", nz(item.getHeight()));
+                params.put("数量", item.getNum() == null ? 1 : item.getNum());
+                putIfText(params, "颜色", item.getColor());
+                putIfText(params, "网子", item.getNetMaterial());
+                putIfText(params, "把手", item.getHandle());
+                putIfText(params, "把手方向", item.getHandleDirection());
+                putIfText(params, "加杆", item.getAddRod());
+                BigDecimal fbNum = parseNum(item.getFixedBottom());
+                params.put("下固定", fbNum != null ? fbNum : BigDecimal.ZERO);
+                params.put("单价", nz(item.getUnitPrice()));
+
+                Map<String, Object> result = callFormulaCalc(item.getDictType(), item.getDictValue(), params);
+                item.setFormulaResult(objectMapper.writeValueAsString(result));
+                int itemNum = item.getNum() == null ? 1 : item.getNum();
+                BigDecimal num = BigDecimal.valueOf(itemNum);
+                BigDecimal formulaArea = dec(result.get("面积"));
+                if (formulaArea.signum() > 0) {
+                    BigDecimal perArea = formulaArea.divide(num, 4, RoundingMode.HALF_UP);
+                    item.setSingleArea(perArea);
+                    item.setChargeArea(perArea);
+                    item.setItemTotalArea(formulaArea.setScale(4, RoundingMode.HALF_UP));
+                }
+                BigDecimal formulaTotal = dec(result.get("总金额"));
+                if (formulaTotal.signum() > 0) {
+                    item.setLineAmount(formulaTotal.setScale(2, RoundingMode.HALF_UP));
+                }
+                orderItemMapper.updateById(item);
+            } catch (BusinessException e) {
+                throw e;
+            } catch (Exception e) {
+                log.warn("打印前重算公式失败，沿用订单已有公式结果：订单={} 产品={} 原因={}",
+                        orderId, item.getProductName(), e.getMessage());
+            }
         }
     }
 

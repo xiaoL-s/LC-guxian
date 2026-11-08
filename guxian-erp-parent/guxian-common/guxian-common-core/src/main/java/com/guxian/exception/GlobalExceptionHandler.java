@@ -2,6 +2,7 @@ package com.guxian.exception;
 
 import com.guxian.result.Result;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataAccessException;
 import org.springframework.validation.BindException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -30,6 +31,15 @@ public class GlobalExceptionHandler {
         String errMsg = e.getBindingResult().getFieldError().getDefaultMessage();
         log.error("【参数校验异常】{}", errMsg);
         return Result.fail(ResultCodeEnum.PARAM_ERROR.getCode(), errMsg);
+    }
+
+    /**
+     * 数据库操作异常（SQL 细节仅记录日志，不返回前端，避免信息泄露）
+     */
+    @ExceptionHandler(DataAccessException.class)
+    public Result<?> handleDataAccessException(DataAccessException e) {
+        log.error("【数据库异常】", e);
+        return Result.fail(ResultCodeEnum.FAIL.getCode(), "数据保存失败，请检查必填项是否填写完整");
     }
 
     /**

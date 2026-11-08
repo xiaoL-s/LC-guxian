@@ -1,0 +1,137 @@
+/**
+ * 全局主题系统：5 套年轻化配色，通过 html[data-theme] 切换
+ * ------------------------------------------------------------------
+ * 覆盖范围：
+ *   · 侧边栏（背景/悬停/激活/图标/子菜单）
+ *   · 顶部导航栏、内容区背景
+ *   · Element Plus 主色（按钮/链接/分页/标签等全局跟随）
+ * 不受影响：表格内容、打印页面、红色告警、业务表单校验色 —— 保证车间识别不受干扰
+ */
+html {
+  /* ===== 默认主题：浅氧青（与原浅蓝侧边栏一致） ===== */
+  --gx-sidebar-bg: #e9f3fe;
+  --gx-sidebar-border: #d6e6f7;
+  --gx-sidebar-text: #303133;
+  --gx-sidebar-icon: #4a7ab5;
+  --gx-sidebar-hover-bg: #dcebfd;
+  --gx-sidebar-hover-text: #1c6cd4;
+  --gx-sidebar-sub-border: #c9dcf2;
+  --gx-sidebar-sub-text: #606266;
+  --gx-sidebar-active-bg: #cfe6ff;
+  --gx-sidebar-active-text: #1c6cd4;
+  --gx-sidebar-active-shadow: rgba(64, 158, 255, 0.15);
+  --gx-header-bg: #ffffff;
+  --gx-header-border: #e4e7ed;
+  --gx-content-bg: #f0f2f5;
+
+  /* Element Plus 主色（默认蓝） */
+  --el-color-primary: #409eff;
+  --el-color-primary-light-3: #79bbff;
+  --el-color-primary-light-5: #a0cfff;
+  --el-color-primary-light-7: #c6e2ff;
+  --el-color-primary-light-8: #d9ecff;
+  --el-color-primary-light-9: #ecf5ff;
+  --el-color-primary-dark-2: #337ecc;
+}
+
+/* ===== 主题② 芋泥奶紫（低饱和温柔紫） ===== */
+html[data-theme="purple"] {
+  --gx-sidebar-bg: #efebfb;
+  --gx-sidebar-border: #ddd3f5;
+  --gx-sidebar-text: #3f3560;
+  --gx-sidebar-icon: #8a72c4;
+  --gx-sidebar-hover-bg: #e3d9f6;
+  --gx-sidebar-hover-text: #6b4fbb;
+  --gx-sidebar-sub-border: #cfc1ef;
+  --gx-sidebar-sub-text: #5d5580;
+  --gx-sidebar-active-bg: #d6c8f0;
+  --gx-sidebar-active-text: #5b3fa8;
+  --gx-sidebar-active-shadow: rgba(139, 111, 208, 0.18);
+  --gx-content-bg: #f4f2fa;
+
+  --el-color-primary: #8b6fd0;
+  --el-color-primary-light-3: #ae9ade;
+  --el-color-primary-light-5: #c5b7e8;
+  --el-color-primary-light-7: #dcd4f1;
+  --el-color-primary-light-8: #e8e2f6;
+  --el-color-primary-light-9: #f3f1fa;
+  --el-color-primary-dark-2: #6f59a6;
+}
+
+/* ===== 主题③ 薄荷奶绿（清新活力薄荷） ===== */
+html[data-theme="mint"] {
+  --gx-sidebar-bg: #e6f7f1;
+  --gx-sidebar-border: #cdeee2;
+  --gx-sidebar-text: #22584a;
+  --gx-sidebar-icon: #4fae94;
+  --gx-sidebar-hover-bg: #d6f1e7;
+  --gx-sidebar-hover-text: #1f9d7a;
+  --gx-sidebar-sub-border: #bde6d7;
+  --gx-sidebar-sub-text: #4a7267;
+  --gx-sidebar-active-bg: #c2eadd;
+  --gx-sidebar-active-text: #12866a;
+  --gx-sidebar-active-shadow: rgba(38, 184, 148, 0.18);
+  --gx-content-bg: #f1f9f6;
+
+  --el-color-primary: #26b894;
+  --el-color-primary-light-3: #67cdb4;
+  --el-color-primary-light-5: #92dcca;
+  --el-color-primary-light-7: #beeadf;
+  --el-color-primary-light-8: #d4f1ea;
+  --el-color-primary-light-9: #e9f8f4;
+  --el-color-primary-dark-2: #1e9376;
+}
+
+/* ===== 主题④ 蜜柚暖橙（温暖明快蜜柚橙） ===== */
+html[data-theme="orange"] {
+  --gx-sidebar-bg: #fdf0e2;
+  --gx-sidebar-border: #f7ddc3;
+  --gx-sidebar-text: #5d4328;
+  --gx-sidebar-icon: #dd9556;
+  --gx-sidebar-hover-bg: #f9e0c8;
+  --gx-sidebar-hover-text: #d97a1f;
+  --gx-sidebar-sub-border: #f2cdab;
+  --gx-sidebar-sub-text: #7d6247;
+  --gx-sidebar-active-bg: #f5d2ae;
+  --gx-sidebar-active-text: #c05f10;
+  --gx-sidebar-active-shadow: rgba(240, 140, 51, 0.18);
+  --gx-content-bg: #fbf6f1;
+
+  --el-color-primary: #f08c33;
+  --el-color-primary-light-3: #f4ae70;
+  --el-color-primary-light-5: #f8c699;
+  --el-color-primary-light-7: #fadcc2;
+  --el-color-primary-light-8: #fce8d6;
+  --el-color-primary-light-9: #fef4eb;
+  --el-color-primary-dark-2: #c07029;
+}
+
+/* ===== 主题⑤ 极简灰白（高级简约黑白灰） ===== */
+html[data-theme="gray"] {
+  --gx-sidebar-bg: #eceff2;
+  --gx-sidebar-border: #d8dee4;
+  --gx-sidebar-text: #2f3640;
+  --gx-sidebar-icon: #6a7581;
+  --gx-sidebar-hover-bg: #dfe4e9;
+  --gx-sidebar-hover-text: #33404e;
+  --gx-sidebar-sub-border: #c9d0d8;
+  --gx-sidebar-sub-text: #5a646e;
+  --gx-sidebar-active-bg: #d3dae1;
+  --gx-sidebar-active-text: #232b33;
+  --gx-sidebar-active-shadow: rgba(88, 102, 117, 0.15);
+  --gx-content-bg: #f5f6f8;
+
+  --el-color-primary: #586675;
+  --el-color-primary-light-3: #8a949e;
+  --el-color-primary-light-5: #acb3ba;
+  --el-color-primary-light-7: #cdd1d6;
+  --el-color-primary-light-8: #dee0e3;
+  --el-color-primary-light-9: #eef0f1;
+  --el-color-primary-dark-2: #46525e;
+}
+
+/* ===== 通用：登录页背景跟随主题主色（柔和渐变） ===== */
+html[data-theme="purple"] body { background: #f4f2fa; }
+html[data-theme="mint"] body { background: #f1f9f6; }
+html[data-theme="orange"] body { background: #fbf6f1; }
+html[data-theme="gray"] body { background: #f5f6f8; }

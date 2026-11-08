@@ -14,7 +14,7 @@
           <el-button @click="resetSearch">重置</el-button>
         </el-col>
         <el-col :span="8" style="text-align:right">
-          <el-button type="primary" @click="openDialog()">新增客户</el-button>
+          <el-button v-if="hasEditPerm('customer')" type="primary" @click="openDialog()">新增客户</el-button>
         </el-col>
       </el-row>
     </el-card>
@@ -35,9 +35,9 @@
         <el-table-column label="创建时间" prop="" width="180"></el-table-column>
         <el-table-column label="操作" width="240">
           <template #default="scope">
-            <el-button size="small" type="primary" @click="openDialog(scope.row)">编辑</el-button>
+            <el-button v-if="hasEditPerm('customer')" size="small" type="primary" @click="openDialog(scope.row)">编辑</el-button>
             <el-button size="small" type="success" @click="goFollow(scope.row)">跟进</el-button>
-            <el-button size="small" type="danger" @click="handleDelete(scope.row)">删除</el-button>
+            <el-button v-if="hasEditPerm('customer')" size="small" type="danger" @click="handleDelete(scope.row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -118,6 +118,7 @@ import { useRouter } from 'vue-router'
 import { getCustomerPage, saveCustomer, delCustomer } from '@/api/customer/customer'
 import type { TCustomerDTO } from '@/types/customer'
 import { ElMessage, ElMessageBox, type ElTable } from 'element-plus'
+import { hasEditPerm } from '@/utils/perm'
 
 const tableRef = ref<ElTable>()
 
@@ -176,14 +177,13 @@ const loadTable = async () => {
     console.error('加载客户列表失败：', err)
   }
 }
-loadTable()
-
+// loadTable() // 初始不自动加载，点查询才出数据
 // 重置搜索
 const resetSearch = () => {
   searchForm.customerName = ''
   searchForm.phone = ''
   page.pageNum = 1
-  loadTable()
+  // loadTable() // 初始不自动加载，点查询才出数据
 }
 
 // 打开弹窗（row 有值为编辑，无值为新增）
@@ -219,7 +219,7 @@ const submitForm = async () => {
     await saveCustomer(form)
     dialogVisible.value = false
     ElMessage.success(isEdit.value ? '修改成功' : '新增成功')
-    loadTable()
+    // loadTable() // 初始不自动加载，点查询才出数据
   } catch (err) {
     console.error('保存客户失败：', err)
   }
@@ -238,7 +238,7 @@ const handleDelete = (row: TCustomerDTO) => {
       try {
         await delCustomer(row.customerId!)
         ElMessage.success('删除成功')
-        loadTable()
+        // loadTable() // 初始不自动加载，点查询才出数据
       } catch (err) {
         console.error('删除客户失败：', err)
       }

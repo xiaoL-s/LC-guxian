@@ -45,8 +45,14 @@
     <el-card shadow="never" class="table-card">
       <div class="toolbar">
         <div class="toolbar-left">
-          <el-button type="primary" size="small" @click="goCreate">＋ 新建订单</el-button>
+          <el-button v-if="hasEditPerm('sales')" type="primary" size="small" @click="goCreate">＋ 新建订单</el-button>
           <el-button size="small" @click="loadTable">刷新</el-button>
+          <el-checkbox
+            :model-value="isAllChecked"
+            :indeterminate="isIndeterminate"
+            size="small"
+            @change="onCheckAll"
+          >全选</el-checkbox>
           <el-button type="warning" size="small" :disabled="checkedIds.length === 0" :loading="printing" @click="printSelected">
             批量打印<span v-if="checkedIds.length">({{ checkedIds.length }})</span>
           </el-button>
@@ -70,9 +76,34 @@
             <div class="head-cell order-no-cell" title="点击查看订单详情">
               <span class="cell-label">订单编号</span>
               <span class="cell-value">
-                <el-link type="primary" :underline="false" @click="toggleDetail(row)">{{ row.orderNo }}</el-link>
+                <span class="order-no" :style="{ color: Number(row.printFlag) === 1 ? '#52c41a' : '#333', cursor: 'pointer' }" @click="toggleDetail(row)">{{ row.orderNo }}</span>
                 <el-tag size="small" type="info" class="sub-tag">{{ row.subOrderCount }}子单</el-tag>
               </span>
+            </div>
+
+            <div class="head-cell">
+              <span class="cell-label">客户</span>
+              <span class="cell-value">{{ row.customerName || '—' }}</span>
+            </div>
+
+            <div class="head-cell">
+              <span class="cell-label">联系电话</span>
+              <span class="cell-value">{{ row.phone || row.contact || '—' }}</span>
+            </div>
+
+            <div class="head-cell addr-cell">
+              <span class="cell-label">终端地址</span>
+              <span class="cell-value addr">{{ row.terminalAddress || '—' }}</span>
+            </div>
+
+            <div class="head-cell">
+              <span class="cell-label">计划交货</span>
+              <span class="cell-value">{{ row.expectDate || '—' }}</span>
+            </div>
+
+            <div class="head-cell">
+              <span class="cell-label">物流</span>
+              <span class="cell-value">{{ row.logistics || '—' }}</span>
             </div>
 
             <div class="head-cell">
@@ -104,31 +135,6 @@
             </div>
 
             <div class="head-cell">
-              <span class="cell-label">计划交货</span>
-              <span class="cell-value">{{ row.expectDate || '—' }}</span>
-            </div>
-
-            <div class="head-cell">
-              <span class="cell-label">物流</span>
-              <span class="cell-value">{{ row.logistics || '—' }}</span>
-            </div>
-
-            <div class="head-cell">
-              <span class="cell-label">客户</span>
-              <span class="cell-value">{{ row.customerName || '—' }}</span>
-            </div>
-
-            <div class="head-cell">
-              <span class="cell-label">联系电话</span>
-              <span class="cell-value">{{ row.phone || row.contact || '—' }}</span>
-            </div>
-
-            <div class="head-cell addr-cell">
-              <span class="cell-label">终端地址</span>
-              <span class="cell-value addr">{{ row.terminalAddress || '—' }}</span>
-            </div>
-
-            <div class="head-cell">
               <span class="cell-label">下单时间</span>
               <span class="cell-value">{{ row.orderDate || '—' }}</span>
             </div>
@@ -150,22 +156,24 @@
               <el-button size="small" type="primary" link @click="toggleDetail(row)">
                 {{ isExpanded(row) ? '收起详情' : '详情' }}
               </el-button>
-              <el-button v-if="canEdit(row)" size="small" type="warning" link @click="goEdit(row)">编辑</el-button>
-              <el-button v-if="row.orderStatus === 0" size="small" type="success" link @click="onPass(row)">受理</el-button>
-              <el-button v-if="row.orderStatus === 0" size="small" type="danger" link @click="onReject(row)">驳回</el-button>
+              <el-button v-if="canEdit(row) && hasEditPerm('sales')" size="small" type="warning" link @click="goEdit(row)">编辑</el-button>
+              <el-button v-if="row.orderStatus === 0 && hasEditPerm('sales')" size="small" type="success" link @click="onPass(row)">受理</el-button>
+              <el-button v-if="row.orderStatus === 0 && hasEditPerm('sales')" size="small" type="danger" link @click="onReject(row)">驳回</el-button>
               <el-dropdown trigger="click" @command="(cmd: string) => onCommand(cmd, row)">
                 <el-button size="small" type="primary" link>更多</el-button>
                 <template #dropdown>
                   <el-dropdown-menu>
                     <el-dropdown-item command="printSales" divided>打印销售单</el-dropdown-item>
-                    <el-dropdown-item command="receive" :disabled="row.orderStatus === 7">收款</el-dropdown-item>
-                    <el-dropdown-item command="settle" :disabled="row.financeStatus === 3">结清</el-dropdown-item>
-                    <el-dropdown-item command="start" :disabled="row.orderStatus !== 1" divided>开工</el-dropdown-item>
-                    <el-dropdown-item command="finish" :disabled="row.orderStatus !== 2">完工</el-dropdown-item>
-                    <el-dropdown-item command="deliver" :disabled="row.orderStatus !== 3">发货</el-dropdown-item>
-                    <el-dropdown-item command="complete" :disabled="row.orderStatus !== 4">完成</el-dropdown-item>
-                    <el-dropdown-item command="cancel" :disabled="![0, 6].includes(row.orderStatus)" divided>取消</el-dropdown-item>
-                    <el-dropdown-item command="delete" :disabled="[1, 2, 3, 4, 5].includes(row.orderStatus)">删除</el-dropdown-item>
+                    <template v-if="hasEditPerm('sales')">
+                      <el-dropdown-item command="receive" :disabled="row.orderStatus === 7">收款</el-dropdown-item>
+                      <el-dropdown-item command="settle" :disabled="row.financeStatus === 3">结清</el-dropdown-item>
+                      <el-dropdown-item command="start" :disabled="row.orderStatus !== 1" divided>开工</el-dropdown-item>
+                      <el-dropdown-item command="finish" :disabled="row.orderStatus !== 2">完工</el-dropdown-item>
+                      <el-dropdown-item command="deliver" :disabled="row.orderStatus !== 3">发货</el-dropdown-item>
+                      <el-dropdown-item command="complete" :disabled="row.orderStatus !== 4">完成</el-dropdown-item>
+                      <el-dropdown-item command="cancel" :disabled="![0, 6].includes(row.orderStatus)" divided>取消</el-dropdown-item>
+                      <el-dropdown-item command="delete" :disabled="[1, 2, 3, 4, 5].includes(row.orderStatus)">删除</el-dropdown-item>
+                    </template>
                   </el-dropdown-menu>
                 </template>
               </el-dropdown>
@@ -331,7 +339,7 @@
 
 <script setup lang="ts">
 defineOptions({ name: 'OrderList' })
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -370,6 +378,25 @@ const onCheck = (row: SalesOrder, checked: boolean) => {
   const idx = checkedIds.value.indexOf(id)
   if (checked && idx === -1) checkedIds.value.push(id)
   if (!checked && idx !== -1) checkedIds.value.splice(idx, 1)
+}
+
+// 全选/半选状态
+const isAllChecked = computed(() => {
+  const list = tableData.value || []
+  return list.length > 0 && list.every((r: SalesOrder) => checkedIds.value.includes(r.orderId!))
+})
+const isIndeterminate = computed(() => {
+  const list = tableData.value || []
+  const checkedCount = list.filter((r: SalesOrder) => checkedIds.value.includes(r.orderId!)).length
+  return checkedCount > 0 && checkedCount < list.length
+})
+const onCheckAll = (checked: boolean) => {
+  const list = tableData.value || []
+  if (checked) {
+    checkedIds.value = list.map((r: SalesOrder) => r.orderId!)
+  } else {
+    checkedIds.value = []
+  }
 }
 
 /** 批量打印选中订单：后端拆单生成工单并标记已打印/开工，前端合并渲染生产单 */
@@ -423,11 +450,12 @@ const orderTypeOptions = ORDER_TYPES
 const money = (v?: number) => (Number(v) || 0).toFixed(2)
 const percent = (v?: number) => `${((Number(v) || 0) * 100).toFixed(2)}%`
 import { fmtTime } from '@/utils/time'
+import { hasEditPerm } from '@/utils/perm'
 
-// ---------------- 详情行内展开（点详情在订单下方展开） ----------------
-const expandedId = ref<number | null>(null)
+// ---------------- 详情行内展开（点详情在订单下方展开，支持同时展开多个） ----------------
+const expandedIds = ref<Set<number>>(new Set())
 const detailTab = ref('info')
-const isExpanded = (row: SalesOrder) => row.orderId === expandedId.value
+const isExpanded = (row: SalesOrder) => expandedIds.value.has(row.orderId!)
 
 /** 时间统一展示 yyyy-MM-dd HH:mm:ss（全局工具，见 utils/time.ts） */
 // 已由全局 fmtTime 提供，此处不再重复定义
@@ -476,8 +504,9 @@ const addRemark = async (row: any) => {
 
 const toggleDetail = async (row: SalesOrder) => {
   // 已展开：收起
-  if (expandedId.value === row.orderId) {
-    expandedId.value = null
+  if (expandedIds.value.has(row.orderId!)) {
+    expandedIds.value.delete(row.orderId!)
+    expandedIds.value = new Set(expandedIds.value)
     return
   }
   // 未加载过详情：先拉取订单详情（含产品明细/金额），只加载一次
@@ -493,7 +522,8 @@ const toggleDetail = async (row: SalesOrder) => {
     // 同时加载备注记录（展开时只需一次，后续增删本地刷新）
     loadRemarks(row as any)
   }
-  expandedId.value = row.orderId!
+  expandedIds.value.add(row.orderId!)
+  expandedIds.value = new Set(expandedIds.value)
 }
 
 const loadTable = async () => {
@@ -651,7 +681,7 @@ const onCommand = (cmd: string, row: any) => {  const id = row.orderId
   }
 }
 
-onMounted(loadTable)
+// onMounted(loadTable) // 初始不自动加载，点查询才出数据
 </script>
 
 <style scoped>

@@ -46,6 +46,8 @@ export interface RenderCtx {
   qrWorkData?: string
   qrCustomerData?: string
   workId?: number | string
+  /** 每个产品明细的二维码base64，key是itemId */
+  itemQrMap?: Record<string, string>
 }
 
 /** 分页信息（由 renderPrintBody 注入） */
@@ -66,9 +68,9 @@ export const COL_GROUPS: Record<string, string[]> = {
 export const groupOfCol = (col: string): string | undefined =>
   Object.keys(COL_GROUPS).find(g => COL_GROUPS[g].includes(col))
 
-/** 默认列：产品放最前，多产品订单一眼能对上号 */
+/** 默认列：去掉产品名列，工人靠左上角二维码区分 */
 export const DEFAULT_COLS = [
-  '产品', '总宽×总高', '数量', '颜色', '固定',
+  '总宽×总高', '数量', '颜色', '固定',
   '外框宽×高', '内框宽×高', '内扇宽×高', '孔位', '横杆',
   '纱网', '上下纱宽×高', '中纱宽×高',
   '加杆', '把手', '备注'
@@ -368,11 +370,14 @@ export function renderBlocksToHtml(blocks: PrintBlock[], ctx: RenderCtx, pageInf
       }
       const baseCols = (b.cols && b.cols.length ? b.cols : DEFAULT_COLS)
       // 默认打印全部配置列（空值显示占位符）；勾选"隐藏空列"时才隐藏整列为空的列
-      const cols = b.hideEmptyCols ? visibleCols(baseCols, items) : baseCols
+      // 强制去掉"产品"列，工人靠左上角二维码区分产品
+      const cols = (b.hideEmptyCols ? visibleCols(baseCols, items) : baseCols).filter((c: string) => c !== '产品')
+      // 表格自动撑满页面宽度：1080 - 左边距 - 右边距
+      const tableW = 1080 - (b.x || 15) - 15
       const body = items.map(it =>
         '<tr>' + cols.map(c => `<td style="${TD}${alignOf(c)}">${esc(cellText(c, it))}</td>`).join('') + '</tr>'
       ).join('')
-      return `<table style="${pos}${hStyle}border-collapse:collapse;width:100%;table-layout:fixed;">
+      return `<table style="position:absolute;left:${b.x}px;top:${b.y}px;width:${tableW}px;border-collapse:collapse;table-layout:fixed;">
         ${buildColgroup(cols)}
         <thead>${buildTableHead(cols)}</thead>
         <tbody>${body}</tbody>
@@ -401,7 +406,7 @@ export function renderPrintBody(blocks: PrintBlock[], ctx: RenderCtx): string {
   const pages = chunkItems(items, perPage)
   return pages.map((slice, i) => {
     const body = renderBlocksToHtml(blocks, { ...ctx, items: slice }, { index: i, total: pages.length })
-    return `<div style="page-break-after:${i === pages.length - 1 ? 'auto' : 'always'};">${body}</div>`
+    return `<div style="page-break-after:${i === pages.length - 1 ? 'auto' : 'always'};position:relative;height:190mm;overflow:hidden;">${body}</div>`
   }).join('')
 }
 
@@ -421,7 +426,7 @@ export function rowsPerPage(blocks: PrintBlock[]): number {
   return Math.max(3, Math.floor(usable / rowH))
 }
 
-export const PRINT_PAGE_CSS = '@page{size:A4 landscape;margin:6mm;}body{margin:0;padding:0;}'
+export const PRINT_PAGE_CSS = '@page{size:A4 landscape;margin:12mm 6mm 6mm 6mm;}body{margin:0;padding:0;}'
 
 export function wrapPrintDocument(bodyHtml: string, title = '生产单'): string {
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${esc(title)}</title>
@@ -591,6 +596,22 @@ export async function prepareQrData(ctx: RenderCtx): Promise<RenderCtx> {
     if (ctx.qrCustomer && !ctx.qrCustomerData) {
       try { ctx.qrCustomerData = await QRCode.toDataURL(ctx.qrCustomer, opts) } catch (e) { console.warn('[打印] 客户二维码生成失败', e) }
     }
+    // 为每个产品明细生成二维码，工人扫码直接进入该产品报工
+    if (ctx.items && ctx.items.length && ctx.workId) {
+      ctx.itemQrMap = {}
+      const itemOpts = { width: 120, margin: 0, errorCorrectionLevel: 'M' as const }
+      for (const it of ctx.items) {
+        const itemId = it?.itemId || it?.id
+        if (!itemId) continue
+        // 小程序报工页面路径，带上workId和itemId
+        const qrContent = `/pages/report/index?workId=${ctx.workId}&itemId=${itemId}`
+        try {
+          ctx.itemQrMap[String(itemId)] = await QRCode.toDataURL(qrContent, itemOpts)
+        } catch (e) {
+          console.warn('[打印] 产品二维码生成失败', itemId, e)
+        }
+      }
+    }
   } catch (e) {
     console.warn('[打印] 二维码库加载失败，使用占位框', e)
   }
@@ -643,7 +664,8 @@ export async function renderWorkOrdersHtml(details: any[], title = '批量生产
     const ctx = buildPrintContext(d)
     await prepareQrData(ctx)
     const body = tpl.rawHtml ? injectFields(tpl.rawHtml, ctx) : renderPrintBody(tpl.blocks!, ctx)
-    pages.push(`<div style="page-break-after:always;">${body}</div>`)
+    // 每个工单单独一页，position:relative让内部绝对定位元素相对于本页定位，height固定避免重叠
+    pages.push(`<div style="page-break-after:always;position:relative;height:190mm;overflow:hidden;">${body}</div>`)
   }
   return wrapPrintDocument(pages.join(''), title)
 }

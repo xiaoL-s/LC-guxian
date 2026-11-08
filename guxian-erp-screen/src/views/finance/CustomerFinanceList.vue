@@ -172,7 +172,7 @@ async function submitRecharge() {
   }
 }
 
-onMounted(loadAll)
+// onMounted(loadAll) // 初始不自动加载，点查询才出数据
 </script>
 
 <style scoped lang="scss">

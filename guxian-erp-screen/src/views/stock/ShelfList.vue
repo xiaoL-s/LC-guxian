@@ -61,8 +61,7 @@ const loadTable = async () => {
   const res = await getShelfList()
   if (res.code === 200) tableData.value = res.data
 }
-loadTable()
-
+// loadTable() // 初始不自动加载，点查询才出数据
 const dialogVisible = ref(false)
 const form = ref<Shelf>({ shelfCode: '', shelfName: '', status: 1, sort: 1 })
 const openAdd = () => { form.value = { shelfCode: '', shelfName: '', status: 1, sort: 1 }; dialogVisible.value = true }

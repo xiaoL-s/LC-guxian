@@ -25,8 +25,9 @@ export function saveOrder(data: any) {
   return request({ url: '/sales/order/save', method: 'post', data })
 }
 // 批量打印订单（打印即开工：拆单生成工单 + 标记已打印 + 订单状态=生产中）
+// 新建订单第一次打印要调拆单接口，比较慢，单独给60秒超时
 export function printOrders(orderIds: number[]) {
-  return request({ url: '/sales/order/print', method: 'post', data: orderIds })
+  return request({ url: '/sales/order/print', method: 'post', data: orderIds, timeout: 60000 })
 }
 // 受理通过
 export function auditPassOrder(orderId: number) {

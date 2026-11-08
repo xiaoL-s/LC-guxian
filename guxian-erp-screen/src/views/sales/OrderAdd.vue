@@ -128,26 +128,21 @@
       </el-form>
     </el-card>
 
-    <!-- ============ 产品明细 ============ -->
+    <!-- ============ 产品明细（卡片式：一产品一卡，不再横滑） ============ -->
     <el-card shadow="never" class="block-card">
       <template #header>
         <div class="card-head">
-          <span class="block-title">产品明细（子单）</span>
+          <span class="block-title">产品明细<span class="cnt">共 {{ order.itemList.length }} 个</span></span>
           <div class="detail-tools">
             <el-button size="small" @click="openDeduct">扣宽</el-button>
-            <el-button size="small" type="primary" plain @click="addProduct">添加产品</el-button>
-            <el-button size="small" type="primary" plain @click="insertProduct">插入产品</el-button>
-            <el-button size="small" plain disabled>导入产品</el-button>
-            <el-button size="small" type="primary" plain @click="appendProduct">追加产品</el-button>
+            <el-button size="small" type="primary" @click="addProduct">＋ 添加产品</el-button>
+            <el-button size="small" @click="appendProduct">追加产品</el-button>
             <el-dropdown trigger="click" @command="onMoreCommand">
-              <el-button size="small">更多操作</el-button>
+              <el-button size="small">更多</el-button>
               <template #dropdown>
                 <el-dropdown-menu>
-                  <el-dropdown-item command="copyInsert">插入复制</el-dropdown-item>
-                  <el-dropdown-item command="copy">复制</el-dropdown-item>
-                  <el-dropdown-item command="delete">删除</el-dropdown-item>
-                  <el-dropdown-item command="print" disabled>打印标签（预留）</el-dropdown-item>
-                  <el-dropdown-item command="attach" disabled>附录图（预留）</el-dropdown-item>
+                  <el-dropdown-item command="copyInsert">插入复制当前卡</el-dropdown-item>
+                  <el-dropdown-item command="delete">删除当前卡</el-dropdown-item>
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
@@ -155,98 +150,80 @@
         </div>
       </template>
 
-      <el-table ref="itemTableRef" :data="order.itemList" border size="small" height="460"
-        :header-cell-style="headerCellStyle"
-        :cell-style="{ padding: '1px 2px' }" @row-click="onRowClick">
-        <!-- 冻结左侧：产品 / 品目 -->
-        <el-table-column label="产品" width="180" fixed="left" show-overflow-tooltip>
-          <template #default="s">
-            <el-select v-model="s.row.productKey" filterable clearable placeholder="选择产品" size="small"
-              style="width: 100%" @change="(v: string) => onProductChange(s.row, v)">
+      <div class="pcard-list">
+        <div v-for="(row, idx) in order.itemList" :key="idx"
+             class="pcard" :class="{ active: idx === currentRowIndex }"
+             @click="currentRowIndex = idx">
+          <!-- 卡片头：产品选择 + 品目 + 操作 -->
+          <div class="pcard-head">
+            <el-select v-model="row.productKey" filterable clearable placeholder="① 选择产品"
+              style="flex:1" @change="(v: string) => onProductChange(row, v)">
               <el-option-group v-for="g in productGroups" :key="g.typeName" :label="g.typeName">
                 <el-option v-for="p in g.items" :key="p.dictType + '-' + p.value" :label="p.label" :value="p.dictType + '|' + p.label + '|' + p.value" />
               </el-option-group>
             </el-select>
-          </template>
-        </el-table-column>
-        <el-table-column label="品目" width="100" fixed="left">
-          <template #default="s"><span class="cell-text">{{ s.row.itemCategory || '—' }}</span></template>
-        </el-table-column>
+            <el-tag v-if="row.itemCategory" size="small" type="info" effect="plain">{{ row.itemCategory }}</el-tag>
+            <div class="pcard-ops">
+              <el-button size="small" text @click.stop="insertProduct(idx)">插入</el-button>
+              <el-button size="small" text type="primary" @click.stop="copyRow(idx)">复制</el-button>
+              <el-button size="small" text type="danger" @click.stop="removeRow(idx)">删</el-button>
+            </div>
+          </div>
 
-        <!-- ① 尺寸组：总高 / 总宽 / 下固定 -->
-        <el-table-column label="尺寸(mm)">
-          <el-table-column label="总高" width="82">
-            <template #default="s">
-              <el-input-number v-model="s.row.height" :min="0" :controls="false" size="small" style="width: 100%" @change="() => calcRow(s.row)" />
-            </template>
-          </el-table-column>
-          <el-table-column label="总宽" width="82">
-            <template #default="s">
-              <el-input-number v-model="s.row.width" :min="0" :controls="false" size="small" style="width: 100%" @change="() => calcRow(s.row)" />
-            </template>
-          </el-table-column>
-          <el-table-column label="下固定" width="92">
-            <template #default="s">
-              <el-select v-model="s.row.fixedBottom" filterable allow-create default-first-option clearable size="small" placeholder="" style="width: 100%">
-                <el-option v-for="o in attrOptions(s.row, { prop: 'fixedBottom', dictKey: 'fixed_bottom' })" :key="o.value + '-' + o.label" :label="o.label" :value="o.label" />
-              </el-select>
-            </template>
-          </el-table-column>
-        </el-table-column>
+          <!-- 尺寸 -->
+          <div class="pcard-grid g4">
+            <label class="fld"><span>总高(mm)</span>
+              <el-input-number v-model="row.height" :min="0" :controls="false" style="width:100%" @change="() => calcRow(row)" /></label>
+            <label class="fld"><span>总宽(mm)</span>
+              <el-input-number v-model="row.width" :min="0" :controls="false" style="width:100%" @change="() => calcRow(row)" /></label>
+            <label class="fld"><span>下固定</span>
+              <el-select v-model="row.fixedBottom" filterable allow-create default-first-option clearable style="width:100%">
+                <el-option v-for="o in attrOptions(row, { prop: 'fixedBottom', dictKey: 'fixed_bottom' })" :key="o.value + '-' + o.label" :label="o.label" :value="o.label" />
+              </el-select></label>
+            <label class="fld"><span>数量</span>
+              <el-input-number v-model="row.num" :min="1" :controls="false" style="width:100%" @change="() => calcRow(row)" /></label>
+          </div>
 
-        <el-table-column label="数量" width="70">
-          <template #default="s">
-            <el-input-number v-model="s.row.num" :min="1" :controls="false" size="small" style="width: 100%" @change="() => calcRow(s.row)" />
-          </template>
-        </el-table-column>
+          <!-- 属性 -->
+          <div class="pcard-grid g6">
+            <label class="fld"><span>颜色</span>
+              <el-select v-model="row.color" filterable allow-create default-first-option clearable style="width:100%">
+                <el-option v-for="o in attrOptions(row, {prop:'color',dictKey:'color'})" :key="o.value+'-'+o.label" :label="o.label" :value="o.label" /></el-select></label>
+            <label class="fld"><span>网子</span>
+              <el-select v-model="row.netMaterial" filterable allow-create default-first-option clearable style="width:100%">
+                <el-option v-for="o in attrOptions(row, {prop:'netMaterial',dictKey:'net'})" :key="o.value+'-'+o.label" :label="o.label" :value="o.label" /></el-select></label>
+            <label class="fld"><span>把手</span>
+              <el-select v-model="row.handle" filterable allow-create default-first-option clearable style="width:100%">
+                <el-option v-for="o in attrOptions(row, {prop:'handle',dictKey:'handle'})" :key="o.value+'-'+o.label" :label="o.label" :value="o.label" /></el-select></label>
+            <label class="fld"><span>把手方向</span>
+              <el-select v-model="row.handleDirection" filterable allow-create default-first-option clearable style="width:100%">
+                <el-option v-for="o in attrOptions(row, {prop:'handleDirection',dictKey:'handle_direction'})" :key="o.value+'-'+o.label" :label="o.label" :value="o.label" /></el-select></label>
+            <label class="fld"><span>开向</span>
+              <el-select v-model="row.openDirection" filterable allow-create default-first-option clearable style="width:100%">
+                <el-option v-for="o in attrOptions(row, {prop:'openDirection',dictKey:'open_direction'})" :key="o.value+'-'+o.label" :label="o.label" :value="o.label" /></el-select></label>
+            <label class="fld"><span>加杆</span>
+              <el-select v-model="row.addRod" filterable allow-create default-first-option clearable style="width:100%">
+                <el-option v-for="o in attrOptions(row, {prop:'addRod',dictKey:'add_rod'})" :key="o.value+'-'+o.label" :label="o.label" :value="o.label" /></el-select></label>
+          </div>
 
-        <!-- ② 产品属性组：颜色 / 网子 / 把手 / 把手方向 / 开向 / 加杆 -->
-        <el-table-column label="产品属性">
-          <el-table-column v-for="col in attrColsMain" :key="col.prop" :label="col.label" :width="col.width">
-            <template #default="s">
-              <el-select v-model="s.row[col.prop]" filterable allow-create default-first-option clearable size="small"
-                placeholder="" style="width: 100%">
-                <el-option v-for="o in attrOptions(s.row, col)" :key="o.value + '-' + o.label" :label="o.label" :value="o.label" />
-              </el-select>
-            </template>
-          </el-table-column>
-        </el-table-column>
+          <!-- 金额 -->
+          <div class="pcard-grid g4">
+            <label class="fld"><span>单价(元)</span>
+              <el-input-number v-model="row.unitPrice" :min="0" :precision="2" :controls="false" style="width:100%" @change="() => calcRow(row)" /></label>
+            <label class="fld"><span>计算方式</span>
+              <el-select v-model="row.calcType" style="width:100%" @change="() => calcRow(row)">
+                <el-option label="按面积" :value="1" /><el-option label="按件" :value="2" /></el-select></label>
+            <label class="fld"><span>面积㎡</span>
+              <div class="fld-read">{{ num(row.itemTotalArea) }}</div></label>
+            <label class="fld fld-amount"><span>实收金额</span>
+              <div class="fld-read amount">￥{{ money(row.receiveAmount ?? row.lineAmount ?? 0) }}</div></label>
+          </div>
 
-        <!-- ③ 金额组：单价 / 面积 / 计算方式 / 实收金额 -->
-        <el-table-column label="金额">
-          <el-table-column label="单价" width="86">
-            <template #default="s">
-              <el-input-number v-model="s.row.unitPrice" :min="0" :precision="2" :controls="false" size="small"
-                style="width: 100%" @change="() => calcRow(s.row)" />
-            </template>
-          </el-table-column>
-          <el-table-column label="面积㎡" width="76" align="right">
-            <template #default="s">{{ num(s.row.itemTotalArea) }}</template>
-          </el-table-column>
-          <el-table-column label="计算方式" width="92">
-            <template #default="s">
-              <el-select v-model="s.row.calcType" size="small" style="width: 100%" @change="() => calcRow(s.row)">
-                <el-option label="按面积" :value="1" />
-                <el-option label="按件" :value="2" />
-              </el-select>
-            </template>
-          </el-table-column>
-          <el-table-column label="实收金额" width="88" align="right">
-            <template #default="s">{{ money(s.row.receiveAmount ?? s.row.lineAmount ?? 0) }}</template>
-          </el-table-column>
-        </el-table-column>
-
-        <el-table-column label="备注" min-width="130">
-          <template #default="s"><el-input v-model="s.row.remark" size="small" /></template>
-        </el-table-column>
-        <el-table-column label="操作" width="128" fixed="right" align="center">
-          <template #default="s">
-            <el-button size="small" type="primary" link @click.stop="insertProduct(s.$index)">插入</el-button>
-            <el-button size="small" type="primary" link @click.stop="copyRow(s.$index)">复制</el-button>
-            <el-button size="small" type="danger" link @click.stop="removeRow(s.$index)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+          <!-- 备注 -->
+          <label class="fld fld-row"><span>备注（该产品特殊说明）</span>
+            <el-input v-model="row.remark" placeholder="选填" /></label>
+        </div>
+      </div>
     </el-card>
 
     <!-- ============ 费用与合计 ============ -->
@@ -347,6 +324,7 @@
 </template>
 
 <script setup lang="ts">
+defineOptions({ name: 'OrderAdd' })
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -618,13 +596,14 @@ const onMoreCommand = (cmd: string) => {
   else if (cmd === 'delete') removeRow(idx)
 }
 
-/** 扣宽：批量给选中行（或当前行）设置扣宽 */
+/** 扣宽：应用到当前高亮卡片（点击卡片即选中） */
 const openDeduct = () => {
-  const rows = selectedRows.value.length ? selectedRows.value : [order.itemList[currentRowIndex.value]]
-  ElMessageBox.prompt('请输入扣宽（mm），将应用到选中行；未选中则应用当前行', '批量扣宽', {
+  const row = order.itemList[currentRowIndex.value]
+  if (!row) { ElMessage.warning('请先点击要扣宽的产品卡片'); return }
+  ElMessageBox.prompt(`请输入扣宽（mm），将应用到当前产品「${row.productName || '未命名'}」`, '扣宽', {
     inputPattern: /^\d+(\.\d+)?$/, inputErrorMessage: '请输入数字', confirmButtonText: '应用', cancelButtonText: '取消'
   }).then(({ value }) => {
-    rows.forEach(r => { r.deductWidth = Number(value); calcRow(r) })
+    row.deductWidth = Number(value); calcRow(row)
     ElMessage.success('扣宽已应用')
   }).catch(() => {})
 }
@@ -764,6 +743,8 @@ const submit = async () => {
     if (res.code === 200) {
       // 新增订单：后端返回工单生成情况（拆单失败也会明确提示，不再静默）
       ElMessage.success(order.orderId ? '修改成功' : (res.data || '订单已保存'))
+      // 保存成功后清空表单，下次进入是空白状态（中途切页面仍会保留未保存的内容）
+      resetForm()
       router.push('/sales/order/entry')
     }
   } catch (e) {
@@ -832,4 +813,25 @@ onMounted(async () => {
 .fp-sum-item b { font-size: 14px; color: #303133; margin-top: 2px; }
 .fp-total b { color: #f56c6c; font-size: 18px; }
 .fp-price { font-size: 18px; }
+
+/* ============ 产品卡片式明细 ============ */
+.pcard-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(520px, 1fr)); gap: 12px; }
+.pcard { border: 1px solid #e4e7ed; border-radius: 10px; padding: 12px 14px; background: #fff;
+  cursor: pointer; transition: all .15s; }
+.pcard:hover { border-color: #a0cfff; box-shadow: 0 2px 10px rgba(64,158,255,.10); }
+.pcard.active { border-color: #409eff; box-shadow: 0 0 0 2px rgba(64,158,255,.15); }
+.pcard-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.pcard-ops { display: flex; gap: 2px; flex-shrink: 0; }
+.pcard-grid { display: grid; gap: 8px 10px; margin-bottom: 10px; }
+.g4 { grid-template-columns: repeat(4, 1fr); }
+.g6 { grid-template-columns: repeat(6, 1fr); }
+.fld { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: #909399; }
+.fld-row { grid-column: 1 / -1; }
+.fld-read { padding: 0 10px; height: 32px; line-height: 32px; background: #f5f7fa; border-radius: 4px;
+  font-size: 13px; color: #303133; }
+.fld-read.amount { color: #f56c6c; font-weight: 600; font-size: 14px; }
+.cnt { font-size: 12px; color: #909399; font-weight: normal; margin-left: 6px; }
+@media (max-width: 1200px) {
+  .g6 { grid-template-columns: repeat(3, 1fr); }
+}
 </style>

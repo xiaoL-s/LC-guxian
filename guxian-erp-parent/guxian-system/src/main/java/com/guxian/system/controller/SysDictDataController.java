@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.guxian.annotation.OperLog;
+import com.guxian.exception.BusinessException;
 import com.guxian.system.dto.FormulaTestRequest;
 import com.guxian.system.entity.SysDictData;
 import com.guxian.result.Result;
@@ -53,6 +54,15 @@ public class SysDictDataController {
     @PostMapping("/save")
     @OperLog(operModule = "字典管理（数据）", operType = "保存", operContent = "新增或修改字典数据信息")
     public Result<Void> save(@RequestBody SysDictData sysDictData) {
+        if (sysDictData == null || !StringUtils.hasText(sysDictData.getDictType())) {
+            throw new BusinessException("所属字典类型不能为空");
+        }
+        if (!StringUtils.hasText(sysDictData.getDictLabel())) {
+            throw new BusinessException("字典标签不能为空");
+        }
+        if (!StringUtils.hasText(sysDictData.getDictValue())) {
+            throw new BusinessException("字典键值不能为空");
+        }
         dictDataService.saveOrUpdate(sysDictData);
         return Result.success();
     }

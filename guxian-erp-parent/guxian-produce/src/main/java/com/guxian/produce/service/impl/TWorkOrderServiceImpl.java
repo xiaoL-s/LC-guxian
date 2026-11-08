@@ -31,6 +31,9 @@ public class TWorkOrderServiceImpl extends ServiceImpl<TWorkOrderMapper, TWorkOr
     private static final int ORDER_PRODUCING = 2;
     private static final int ORDER_FINISHED = 3;
 
+    /** 全局统一时间格式（与系统其他模块一致） */
+    private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
     /** 工单状态 */
     private static final String STATUS_WAIT = "WAIT_PROCESS";
     private static final String STATUS_PROCESSING = "PROCESSING";
@@ -215,7 +218,7 @@ public class TWorkOrderServiceImpl extends ServiceImpl<TWorkOrderMapper, TWorkOr
         for (TWorkProcessRecord r : records) {
             doneMap.computeIfAbsent(r.getProcessId(), k -> new HashMap<>())
                     .put(r.getItemId(), Map.of("operUsername", r.getOperUsername() == null ? "" : r.getOperUsername(),
-                            "scanTime", r.getScanTime() == null ? "" : r.getScanTime().toString()));
+                            "scanTime", r.getScanTime() == null ? "" : TIME_FMT.format(r.getScanTime())));
         }
         List<Map<String, Object>> processList = new ArrayList<>();
         for (TProcessDict p : processes) {
@@ -253,8 +256,8 @@ public class TWorkOrderServiceImpl extends ServiceImpl<TWorkOrderMapper, TWorkOr
             row.put("unitPrice", r.getUnitPrice());
             row.put("pieceWage", r.getPieceWage());
             row.put("remark", r.getRemark() == null ? "" : r.getRemark());
-            row.put("reportTime", r.getReportTime() == null ? "" : r.getReportTime().toString());
-            row.put("updateTime", r.getUpdateTime() == null ? "" : r.getUpdateTime().toString());
+            row.put("reportTime", r.getReportTime() == null ? "" : TIME_FMT.format(r.getReportTime()));
+            row.put("updateTime", r.getUpdateTime() == null ? "" : TIME_FMT.format(r.getUpdateTime()));
             TProcessDict p = processDictMapper.selectById(r.getProcessId());
             row.put("processName", p == null ? "" : p.getProcessName());
             reportList.add(row);
@@ -596,27 +599,58 @@ public class TWorkOrderServiceImpl extends ServiceImpl<TWorkOrderMapper, TWorkOr
         if (STATUS_FINISHED.equals(work.getWorkStatus())) {
             throw new BusinessException("工单已完工入库，请勿重复操作");
         }
-        // 校验全部启用工序、全部产品行均已完成（多产品工单：每产品每工序都必须报工）
-        List<TProcessDict> processes = processDictMapper.selectList(new LambdaQueryWrapper<TProcessDict>()
-                .eq(TProcessDict::getStatus, 1).orderByAsc(TProcessDict::getProcessSort));
+        // 校验：仅对「该产品在计件价表中配置了且单价>0」的工序要求完工。
+        // 与小程序扫码报工口径一致：0元或未配置 = 该产品无此工序，不参与完工校验。
+        // 否则会出现"工人看不到、报不了、系统却要求完成"的死锁，导致永远无法入库。
         List<Map<String, Object>> orderItems = salesOrderReadMapper.selectOrderItems(work.getSalesOrderId());
         if (orderItems.isEmpty()) {
             throw new BusinessException("订单无产品明细，无法完工入库");
         }
+        // 本订单所有产品名
+        java.util.Set<String> orderProducts = new java.util.HashSet<>();
+        for (Map<String, Object> it : orderItems) {
+            String pn = it.get("productName") == null ? "" : it.get("productName").toString();
+            if (!pn.isEmpty()) orderProducts.add(pn);
+        }
+        // 产品名 -> (工序id -> 单价)
+        Map<String, Map<Long, BigDecimal>> cfgByProduct = new HashMap<>();
+        if (!orderProducts.isEmpty()) {
+            List<TProcessProductPrice> cfgs = processProductPriceMapper.selectList(
+                    new LambdaQueryWrapper<TProcessProductPrice>()
+                            .in(TProcessProductPrice::getProductName, orderProducts));
+            for (TProcessProductPrice pp : cfgs) {
+                cfgByProduct.computeIfAbsent(pp.getProductName(), k -> new HashMap<>())
+                        .put(pp.getProcessId(), pp.getPrice());
+            }
+        }
+        // 启用工序（取工序名用于报错提示）
+        List<TProcessDict> enabledProcs = processDictMapper.selectList(new LambdaQueryWrapper<TProcessDict>()
+                .eq(TProcessDict::getStatus, 1).orderByAsc(TProcessDict::getProcessSort));
+        Map<Long, String> procNameMap = new HashMap<>();
+        for (TProcessDict pd : enabledProcs) {
+            procNameMap.put(pd.getProcessId(), pd.getProcessName());
+        }
+        // 已完成记录：产品行id -> 已完成工序id集合
         List<TWorkProcessRecord> records = processRecordMapper.selectList(new LambdaQueryWrapper<TWorkProcessRecord>()
                 .eq(TWorkProcessRecord::getWorkId, workId));
-        // processId -> 已完成的产品行ID集合
-        Map<Long, Set<Long>> procItemsDone = new HashMap<>();
+        Map<Long, Set<Long>> doneByItem = new HashMap<>();
         for (TWorkProcessRecord r : records) {
-            procItemsDone.computeIfAbsent(r.getProcessId(), k -> new HashSet<>()).add(r.getItemId());
+            doneByItem.computeIfAbsent(r.getItemId(), k -> new HashSet<>()).add(r.getProcessId());
         }
-        for (TProcessDict p : processes) {
-            Set<Long> doneItems = procItemsDone.getOrDefault(p.getProcessId(), new HashSet<>());
-            for (Map<String, Object> it : orderItems) {
-                Long itemId = it.get("itemId") == null ? null : ((Number) it.get("itemId")).longValue();
-                if (itemId != null && !doneItems.contains(itemId)) {
-                    String productName = it.get("productName") == null ? "" : it.get("productName").toString();
-                    throw new BusinessException("尚有未完成：「" + productName + "」的「" + p.getProcessName() + "」");
+        // 逐产品行校验：只校验该产品 price>0 的工序
+        for (Map<String, Object> it : orderItems) {
+            Long itemId = it.get("itemId") == null ? null : ((Number) it.get("itemId")).longValue();
+            String productName = it.get("productName") == null ? "" : it.get("productName").toString();
+            if (itemId == null) continue;
+            Map<Long, BigDecimal> cfg = cfgByProduct.getOrDefault(productName, Collections.emptyMap());
+            Set<Long> doneProcs = doneByItem.getOrDefault(itemId, new HashSet<>());
+            for (Map.Entry<Long, BigDecimal> e : cfg.entrySet()) {
+                BigDecimal price = e.getValue();
+                if (price == null || price.compareTo(BigDecimal.ZERO) <= 0) continue; // 0元工序不校验
+                Long procId = e.getKey();
+                if (!doneProcs.contains(procId)) {
+                    String procName = procNameMap.getOrDefault(procId, "工序#" + procId);
+                    throw new BusinessException("尚有未完成：「" + productName + "」的「" + procName + "」");
                 }
             }
         }

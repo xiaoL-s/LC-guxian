@@ -2,6 +2,7 @@ package com.guxian.produce.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.guxian.annotation.OperLog;
+import com.guxian.exception.BusinessException;
 import com.guxian.produce.entity.TProcessProductPrice;
 import com.guxian.produce.service.TProcessProductPriceService;
 import com.guxian.result.Result;
@@ -10,6 +11,7 @@ import jakarta.annotation.Resource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -43,6 +45,15 @@ public class  TProcessProductPriceController {
     @OperLog(operModule = "产品计件价", operContent = "保存计件价")
     @PostMapping("/save")
     public Result<Void> save(@RequestBody TProcessProductPrice price) {
+        if (price == null || price.getProcessId() == null) {
+            throw new BusinessException("请选择所属工序");
+        }
+        if (!StringUtils.hasText(price.getProductName())) {
+            throw new BusinessException("产品名称不能为空");
+        }
+        if (price.getPrice() != null && price.getPrice().signum() < 0) {
+            throw new BusinessException("计件单价不能为负数");
+        }
         priceService.savePrice(price);
         return Result.success();
     }

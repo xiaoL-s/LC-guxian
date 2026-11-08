@@ -3,11 +3,13 @@ package com.guxian.system.controller;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.guxian.annotation.OperLog;
+import com.guxian.exception.BusinessException;
 import com.guxian.system.dto.SysPrintTemplateDTO;
 import com.guxian.system.entity.SysPrintTemplate;
 import com.guxian.result.Result;
 import com.guxian.system.service.SysPrintTemplateService;
 import jakarta.annotation.Resource;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -52,6 +54,12 @@ public class SysPrintTemplateController {
     @PostMapping("/save")
     @OperLog(operModule = "打印模板管理", operType = "保存", operContent = "新增/修改打印模板信息")
     public Result<Void> save(@RequestBody SysPrintTemplateDTO dto) {
+        if (dto == null || !StringUtils.hasText(dto.getTemplateName())) {
+            throw new BusinessException("模板名称不能为空");
+        }
+        if (!StringUtils.hasText(dto.getTemplateType())) {
+            throw new BusinessException("模板类型不能为空");
+        }
         printTemplateService.saveTemplate(dto);
         return Result.success();
     }

@@ -95,8 +95,8 @@ public interface WageSummaryMapper {
 
     /** 某工人某月计件工资合计（生成月度工资时自动带出） */
     @Select("SELECT IFNULL(SUM(piece_wage),0) FROM t_work_report " +
-            "WHERE worker_id = #{workerId} AND report_time &gt;= #{monthStart} " +
-            "AND report_time &lt; DATE_ADD(#{monthEnd}, INTERVAL 1 DAY)")
+            "WHERE worker_id = #{workerId} AND report_time >= #{monthStart} " +
+            "AND report_time < DATE_ADD(#{monthEnd}, INTERVAL 1 DAY)")
     java.math.BigDecimal monthTotal(@Param("workerId") Long workerId,
                                     @Param("monthStart") String monthStart,
                                     @Param("monthEnd") String monthEnd);

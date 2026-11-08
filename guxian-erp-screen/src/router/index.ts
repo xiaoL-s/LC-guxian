@@ -226,6 +226,24 @@ const routes = [
           cacheName: 'ProfitReport', title: '利润报表', icon: '' } }
     ]
   },
+  // ============ 小程序配置 ============
+  {
+    path: '/mini',
+    name: 'MiniIndex',
+    component: () => import('@/views/system/SystemIndex.vue'),
+    meta: { title: '小程序配置' },
+    children: [
+      { path: 'wechat', name: 'LuOfficial', component: () => import('@/views/games/Official.vue'), meta: {
+          title: '小卢官方', icon: '' } },
+      { path: 'games/snake', name: 'SnakeGame', component: () => import('@/views/games/Snake.vue'), meta: {
+          title: '贪吃蛇', icon: '' } },
+      { path: 'games/tetris', name: 'TetrisGame', component: () => import('@/views/games/Tetris.vue'), meta: {
+          title: '俄罗斯方块', icon: '' } },
+      { path: 'games/gomoku', name: 'GomokuGame', component: () => import('@/views/games/Gomoku.vue'), meta: {
+          title: '五子棋', icon: '' } },
+      { path: ':pathMatch(.*)*', component: () => import('@/views/common/ComingSoon.vue'), meta: { title: '小程序配置' } }
+    ]
+  },
   // ============ 尚未开发的模块：统一占位，避免点菜单出现空白页 ============
   ...buildPendingRoutes()
 ]
@@ -235,8 +253,7 @@ function buildPendingRoutes() {
   const pending: Array<{ path: string; title: string }> = [
     { path: '/xiaolu', title: '首页看板' },
     { path: '/supplier', title: '供应商管理' },
-    { path: '/purchase', title: '采购管理' },
-    { path: '/mini', title: '小程序配置' }
+    { path: '/purchase', title: '采购管理' }
   ]
   const Layout = () => import('@/views/system/SystemIndex.vue')
   const ComingSoon = () => import('@/views/common/ComingSoon.vue')

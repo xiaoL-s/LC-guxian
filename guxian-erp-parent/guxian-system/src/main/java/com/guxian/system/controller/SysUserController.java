@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.guxian.annotation.OperLog;
+import com.guxian.exception.BusinessException;
 import com.guxian.system.dto.SysUserDTO;
 import com.guxian.system.entity.SysUser;
 import com.guxian.result.Result;
@@ -38,6 +39,12 @@ public class SysUserController {
     @PostMapping("/save")
     @OperLog(operModule = "员工管理", operType = "保存", operContent = "新增/修改员工信息")
     public Result<Void> save(@RequestBody SysUserDTO dto) {
+        if (dto == null || !StringUtils.hasText(dto.getUsername())) {
+            throw new BusinessException("登录账号不能为空");
+        }
+        if (!StringUtils.hasText(dto.getRealName())) {
+            throw new BusinessException("员工姓名不能为空");
+        }
         userService.saveUser(dto);
         return Result.success();
     }

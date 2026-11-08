@@ -8,7 +8,6 @@
         <el-form-item>
           <el-button type="primary" @click="onSearch">查询</el-button>
           <el-button @click="onReset">重置</el-button>
-          <el-button type="primary" @click="splitVisible = true">拆单生成工单</el-button>
         </el-form-item>
       </el-form>
       <!-- 状态切换（tabs 样式） -->
@@ -200,7 +199,7 @@ const loadTable = async () => {
     if (res.code === 200) { tableData.value = res.data.records; total.value = res.data.total }
   } catch (e) { console.error(e) } finally { loading.value = false }
 }
-loadTable()
+// loadTable() // 初始不自动加载，点查询才出数据
 const onSearch = () => { page.pageNum = 1; loadTable() }
 const onReset = () => { search.keyword = ''; search.workStatus = ''; page.pageNum = 1; loadTable() }
 const fmt = (v: any) => (Number(v) || 0).toFixed(2)

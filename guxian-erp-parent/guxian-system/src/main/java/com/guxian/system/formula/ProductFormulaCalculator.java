@@ -97,7 +97,8 @@ public final class ProductFormulaCalculator {
             if (row == null || row.expr == null) continue;
             Double v = FormulaExprEvaluator.evalNum(row.expr, ctx);
             ctx.put(name, v);
-            out.put(name, round2(v));
+            // 变量组（孔位/防护杆等）向下取整到个位 mm
+            out.put(name, (double) Math.floor(v));
         }
 
         // 2) 型材：支持行间互相引用（如 横杆=内框宽），多轮循环计算直到不再有新结果；
@@ -124,10 +125,11 @@ public final class ProductFormulaCalculator {
                         double dim = FormulaExprEvaluator.evalNum(row.expr, ctx);
                         double mult = row.mult == null ? 1 : FormulaExprEvaluator.evalNum(row.mult, ctx);
                         ctx.put(name, dim);
+                        // 型材尺寸（dim/total）按车间下料习惯向上取整 mm；数量 mult 保留原值
                         Map<String, Object> m = new LinkedHashMap<>();
-                        m.put("dim", round2(dim));
+                        m.put("dim", (double) Math.ceil(dim));
                         m.put("mult", round2(mult));
-                        m.put("total", round2(dim * mult));
+                        m.put("total", (double) Math.ceil(dim * mult));
                         profiles.put(name, m);
                         pit.remove();
                         progress = true;
@@ -165,9 +167,10 @@ public final class ProductFormulaCalculator {
                 double w = FormulaExprEvaluator.evalNum(row.w, ctx);
                 double h = FormulaExprEvaluator.evalNum(row.h, ctx);
                 double mult = row.mult == null ? 1 : FormulaExprEvaluator.evalNum(row.mult, ctx);
+                // 纱网尺寸 w/h 向上取整 mm；area 是平米保留2位
                 Map<String, Object> m = new LinkedHashMap<>();
-                m.put("w", round2(w));
-                m.put("h", round2(h));
+                m.put("w", (double) Math.ceil(w));
+                m.put("h", (double) Math.ceil(h));
                 m.put("mult", round2(mult));
                 m.put("area", round2(w * h * 0.000001 * mult));
                 nets.put(name, m);

@@ -92,8 +92,26 @@ private SysMenuMapper sysMenuMapper;
         resp.setUsername(user.getUsername());
         resp.setRealName(user.getRealName());
         resp.setToken(token);
+
+        // 查用户角色code列表
+        LambdaQueryWrapper<SysUserRole> urWrapper = new LambdaQueryWrapper<>();
+        urWrapper.eq(SysUserRole::getUserId, user.getId());
+        List<SysUserRole> userRoles = userRoleMapper.selectList(urWrapper);
+        List<Long> roleIds = userRoles.stream().map(SysUserRole::getRoleId).collect(Collectors.toList());
+
+        List<String> roleCodes = new ArrayList<>();
+        if (!roleIds.isEmpty()) {
+            LambdaQueryWrapper<SysRole> roleWrapper = new LambdaQueryWrapper<>();
+            roleWrapper.in(SysRole::getId, roleIds);
+            roleWrapper.eq(SysRole::getDelFlag, 0);
+            List<SysRole> roles = sysRoleMapper.selectList(roleWrapper);
+            roleCodes = roles.stream().map(SysRole::getRoleCode).collect(Collectors.toList());
+        }
+        resp.setRoleCodes(roleCodes);
+
         // 超级管理员标记：系统内置超管(id=1) 或 roles 中声明"超级管理员"
         boolean isAdmin = user.getId() != null && user.getId() == 1L
+                || roleCodes.contains("admin")
                 || (user.getRoles() != null && user.getRoles().contains("超级管理员"));
         resp.setIsAdmin(isAdmin);
 

@@ -3,6 +3,7 @@ package com.guxian.system.controller;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.guxian.annotation.OperLog;
+import com.guxian.exception.BusinessException;
 import com.guxian.system.entity.SysDictType;
 import com.guxian.result.Result;
 import com.guxian.system.service.SysDictTypeService;
@@ -46,6 +47,12 @@ public class SysDictTypeController {
     @PostMapping("/save")
     @OperLog(operModule = "字典管理（类型）", operType = "保存", operContent = "新增或修改字典类型信息")
     public Result<Void> save(@RequestBody SysDictType sysDictType) {
+        if (sysDictType == null || !StringUtils.hasText(sysDictType.getDictType())) {
+            throw new BusinessException("字典类型编码不能为空");
+        }
+        if (!StringUtils.hasText(sysDictType.getDictName())) {
+            throw new BusinessException("字典类型名称不能为空");
+        }
         dictTypeService.saveOrUpdate(sysDictType);
         return Result.success();
     }

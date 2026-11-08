@@ -82,7 +82,7 @@ const statusTab = ref('')
 const onTabStatus = () => {
   search.orderStatus = statusTab.value === '' ? undefined : Number(statusTab.value)
   page.pageNum = 1
-  loadTable()
+  // loadTable() // 初始不自动加载，点查询才出数据
 }
 
 const loadTable = async () => {
@@ -92,7 +92,7 @@ const loadTable = async () => {
     if (res.code === 200) { tableData.value = res.data.records; total.value = res.data.total }
   } catch (e) { console.error(e) } finally { loading.value = false }
 }
-loadTable()
+// loadTable() // 初始不自动加载，点查询才出数据
 const onSearch = () => { page.pageNum = 1; loadTable() }
 const onReset = () => { search.orderNo = ''; search.customerName = ''; search.orderStatus = undefined; statusTab.value = ''; page.pageNum = 1; loadTable() }
 const fmt = (v?: number) => (Number(v) || 0).toFixed(2)

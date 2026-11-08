@@ -2,7 +2,7 @@
   <div class="sidebar" :class="{ collapse: isCollapse }">
     <template v-for="item in menuList" :key="item.id">
       <div class="menu-item">
-        <!-- 收缩状态禁止展开子菜单 !isCollapse -->
+        <!-- 收缩状态禁止展开子菜单 -->
         <div class="menu-title" @click="!isCollapse && onMenuClick(item)">
           <component
             v-if="item.icon"
@@ -14,12 +14,12 @@
           <span
             v-if="!isCollapse && item.children && item.children.length > 0"
             class="arrow"
-            :class="{ expand: item._expand }"
+            :class="{ expand: isExpanded(item.menuName) }"
           >></span>
         </div>
 
         <!-- 收缩状态直接隐藏子菜单 -->
-        <div v-show="!isCollapse && item._expand" class="sub-menu">
+        <div v-show="!isCollapse && isExpanded(item.menuName)" class="sub-menu">
           <router-link
             v-for="child in item.children"
             :key="child.id"
@@ -41,8 +41,8 @@
 </template>
 
 <script setup lang="ts">
-import { defineProps } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, watch, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 // 导入antd图标
 import {
   HomeOutlined,
@@ -58,10 +58,10 @@ import {
   WechatOutlined
 } from '@ant-design/icons-vue'
 
-// 图标映射：数据库icon字段和key严格一致
 const router = useRouter()
+const route = useRoute()
 
-// 图标映射：数据库icon字段和key严格一致
+// 图标映射
 const iconMap: Record<string, any> = {
   HomeOutlined,
   SettingOutlined,
@@ -76,16 +76,46 @@ const iconMap: Record<string, any> = {
   WechatOutlined
 }
 
-defineProps<{
+const props = defineProps<{
   menuList: any[]
   isCollapse: boolean
 }>()
 
-const toggleExpand = (item: any) => {
-  item._expand = !item._expand
+// ========== 展开状态管理（独立 Set，不依赖对象属性） ==========
+const expandedNames = ref<Set<string>>(new Set())
+
+// 从 localStorage 恢复
+const loadFromStorage = () => {
+  try {
+    const saved = JSON.parse(localStorage.getItem('menu_expanded') || '[]')
+    expandedNames.value = new Set(saved)
+  } catch {
+    expandedNames.value = new Set()
+  }
 }
 
-/** 顶级菜单点击：有子菜单则展开/收起；无子菜单直接跳转 */
+// 保存到 localStorage
+const saveToStorage = () => {
+  localStorage.setItem('menu_expanded', JSON.stringify([...expandedNames.value]))
+}
+
+// 判断菜单是否展开
+const isExpanded = (name: string) => expandedNames.value.has(name)
+
+// 切换展开/收起
+const toggleExpand = (item: any) => {
+  const name = item.menuName
+  if (expandedNames.value.has(name)) {
+    expandedNames.value.delete(name)
+  } else {
+    expandedNames.value.add(name)
+  }
+  // 触发响应式更新
+  expandedNames.value = new Set(expandedNames.value)
+  saveToStorage()
+}
+
+// 顶级菜单点击
 const onMenuClick = (item: any) => {
   if (item.children && item.children.length > 0) {
     toggleExpand(item)
@@ -93,6 +123,33 @@ const onMenuClick = (item: any) => {
     router.push(item.path)
   }
 }
+
+// 初始化：从 localStorage 恢复（必须在watch之前执行）
+loadFromStorage()
+
+// 路由切换时：当前页面的父菜单自动展开
+const autoExpandActive = () => {
+  // 菜单数据还没加载完时不执行，避免清空localStorage
+  if (!props.menuList || props.menuList.length === 0) return
+  const cur = route.path
+  props.menuList.forEach(m => {
+    if (m.children && m.children.some((c: any) => c.path === cur)) {
+      expandedNames.value.add(m.menuName)
+    }
+  })
+  expandedNames.value = new Set(expandedNames.value)
+  saveToStorage()
+}
+
+// 监听路由变化
+watch(() => route.path, autoExpandActive)
+
+// 菜单数据加载完后，自动展开当前页的父菜单
+watch(() => props.menuList, (newList) => {
+  if (newList && newList.length > 0) {
+    autoExpandActive()
+  }
+}, { immediate: true })
 </script>
 
 <style scoped lang="scss">
@@ -101,13 +158,12 @@ const onMenuClick = (item: any) => {
   height: 100vh;
   padding: 16px 10px;
   box-sizing: border-box;
-  background: #e9f3fe;
-  border-right: 1px solid #d6e6f7;
-  color: #303133;
+  background: var(--gx-sidebar-bg);
+  border-right: 1px solid var(--gx-sidebar-border);
+  color: var(--gx-sidebar-text);
   overflow-y: auto;
-  overflow-x: hidden; /* ✅关键，横向溢出隐藏 */
+  overflow-x: hidden;
   font-family: "PingFang SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
-  /* ✅调整动画时间+缓动曲线 */
   transition: width 0.34s cubic-bezier(0.2, 0, 0.2, 1);
   box-shadow: 1px 0 4px rgba(0, 0, 0, 0.04);
 
@@ -122,7 +178,6 @@ const onMenuClick = (item: any) => {
     background: transparent;
   }
 
-  /* 收缩模式 */
   &.collapse {
     width: 64px;
     padding: 16px 6px;
@@ -142,15 +197,15 @@ const onMenuClick = (item: any) => {
     transition: 0.22s ease;
 
     &:hover {
-      background: #dcebfd;
-      color: #1c6cd4;
+      background: var(--gx-sidebar-hover-bg);
+      color: var(--gx-sidebar-hover-text);
     }
   }
 
   .menu-icon {
     font-size: 17px;
     margin-right: 6px;
-    color: #4a7ab5;
+    color: var(--gx-sidebar-icon);
     flex-shrink: 0;
   }
 
@@ -160,7 +215,7 @@ const onMenuClick = (item: any) => {
     font-size: 13.5px;
     letter-spacing: 0.2px;
     margin-right: 6px;
-    white-space: nowrap; /* ✅禁止文字换行 */
+    white-space: nowrap;
     overflow: hidden;
     max-width: 160px;
     transition: max-width 0.34s cubic-bezier(0.2, 0, 0.2, 1);
@@ -176,7 +231,6 @@ const onMenuClick = (item: any) => {
     }
   }
 
-  /* 收缩状态 */
   :deep(.collapse) & .menu-title {
     justify-content: center;
     padding: 11px 0;
@@ -184,7 +238,6 @@ const onMenuClick = (item: any) => {
   :deep(.collapse) & .menu-icon {
     margin-right: 0;
   }
-  /* 收缩时文字max‑width变成0，文字平滑消失，不会挤压字体 */
   :deep(.collapse) & .menu-text {
     max-width: 0;
     margin-right: 0;
@@ -197,7 +250,7 @@ const onMenuClick = (item: any) => {
 .sub-menu {
   margin: 4px 0 8px 14px;
   padding-left: 14px;
-  border-left: 1px solid #c9dcf2;
+  border-left: 1px solid var(--gx-sidebar-sub-border);
 
   .sub-item {
     display: flex;
@@ -205,7 +258,7 @@ const onMenuClick = (item: any) => {
     padding: 9px 14px;
     margin-bottom: 3px;
     border-radius: 8px;
-    color: #606266;
+    color: var(--gx-sidebar-sub-text);
     text-decoration: none;
     font-size: 13px;
     transition: all 0.22s ease;
@@ -217,15 +270,15 @@ const onMenuClick = (item: any) => {
     }
 
     &:hover {
-      background: #dcebfd;
-      color: #1c6cd4;
+      background: var(--gx-sidebar-hover-bg);
+      color: var(--gx-sidebar-hover-text);
     }
 
     &.active {
-      color: #1c6cd4;
-      background: #cfe6ff;
+      color: var(--gx-sidebar-active-text);
+      background: var(--gx-sidebar-active-bg);
       font-weight: 600;
-      box-shadow: 0 1px 6px rgba(64, 158, 255, 0.15);
+      box-shadow: 0 1px 6px var(--gx-sidebar-active-shadow);
     }
   }
 }

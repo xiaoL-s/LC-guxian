@@ -16,6 +16,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -23,6 +25,9 @@ import java.util.Map;
 
 @Service
 public class TWorkReportServiceImpl extends ServiceImpl<TWorkReportMapper, TWorkReport> implements TWorkReportService {
+
+    /** 全局统一时间格式（与系统其他模块一致） */
+    private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     @Resource
     private TProcessDictMapper processDictMapper;
@@ -78,8 +83,8 @@ public class TWorkReportServiceImpl extends ServiceImpl<TWorkReportMapper, TWork
             row.put("unitPrice", r.getUnitPrice());
             row.put("pieceWage", r.getPieceWage());
             row.put("remark", r.getRemark() == null ? "" : r.getRemark());
-            row.put("reportTime", r.getReportTime() == null ? "" : r.getReportTime().toString());
-            row.put("updateTime", r.getUpdateTime() == null ? "" : r.getUpdateTime().toString());
+            row.put("reportTime", r.getReportTime() == null ? "" : TIME_FMT.format(r.getReportTime()));
+            row.put("updateTime", r.getUpdateTime() == null ? "" : TIME_FMT.format(r.getUpdateTime()));
             TProcessDict proc = processDictMapper.selectById(r.getProcessId());
             row.put("processName", proc == null ? "" : proc.getProcessName());
             TWorkOrder wo = workOrderMapper.selectById(r.getWorkOrderId());

@@ -5,9 +5,11 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.guxian.customer.dto.TCustomerDTO;
 import com.guxian.customer.entity.TCustomer;
+import com.guxian.exception.BusinessException;
 import com.guxian.result.Result;
 import com.guxian.customer.service.TCustomerService;
 import com.guxian.annotation.OperLog;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 import jakarta.annotation.Resource;
 import java.util.List;
@@ -47,6 +49,9 @@ public class TCustomerController {
     @PostMapping("/save")
     @OperLog(operModule = "客户管理", operType = "保存", operContent = "新增/编辑客户信息")
     public Result<Long> save(@RequestBody TCustomerDTO dto) {
+        if (dto == null || !StringUtils.hasText(dto.getCustomerName())) {
+            throw new BusinessException("客户名称不能为空");
+        }
         Long id = customerService.saveCustomer(dto);
         return Result.success(id);
     }

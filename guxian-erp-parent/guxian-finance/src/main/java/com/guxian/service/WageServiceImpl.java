@@ -22,6 +22,9 @@ import java.util.Map;
 @Service
 public class WageServiceImpl implements WageService {
 
+    /** 全局统一时间格式（与系统其他模块一致） */
+    private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
     @Resource
     private WageSummaryMapper wageSummaryMapper;
 
@@ -87,7 +90,7 @@ public class WageServiceImpl implements WageService {
             row.put("realWage", ww.getRealWage());
             row.put("status", ww.getStatus());
             row.put("remark", ww.getRemark());
-            row.put("updateTime", ww.getUpdateTime());
+            row.put("updateTime", ww.getUpdateTime() == null ? "" : TIME_FMT.format(ww.getUpdateTime()));
             rows.add(row);
         }
         return rows;
