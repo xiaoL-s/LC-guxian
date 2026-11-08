@@ -96,9 +96,12 @@ public final class ProductFormulaCalculator {
             Row row = firstMatchRow(cfg.get(name), ctx);
             if (row == null || row.expr == null) continue;
             Double v = FormulaExprEvaluator.evalNum(row.expr, ctx);
-            ctx.put(name, v);
-            // 变量组（孔位/防护杆等）向下取整到个位 mm
-            out.put(name, (double) Math.floor(v));
+            // 变量组（孔位/防护杆等）取整到个位 mm：四舍五入，与老系统打印单口径一致；
+            // 取整后的值必须回写上下文，下游型材/纱网引用的是取整值
+            //（否则如 小短杆=孔位-25 会按 250.33 计算再向上取整，多出 1mm）
+            double rounded = Math.round(v);
+            ctx.put(name, rounded);
+            out.put(name, rounded);
         }
 
         // 2) 型材：支持行间互相引用（如 横杆=内框宽），多轮循环计算直到不再有新结果；

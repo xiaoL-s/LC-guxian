@@ -93,47 +93,35 @@ public final class FormulaExprEvaluator {
             String pattern = "(?<![\\u4e00-\\u9fa5A-Za-z0-9_])" + Pattern.quote(k) + "(?![\\u4e00-\\u9fa5A-Za-z0-9_])";
             s = s.replaceAll(pattern, Matcher.quoteReplacement(rep));
         }
-        // 3) 剩余裸中文 -> 字符串字面量（先保护已带引号的串，避免重复包裹）
-        List<String> quoted = new ArrayList<>();
-        Matcher qm = QUOTED.matcher(s);
-        StringBuffer sb1 = new StringBuffer();
-        while (qm.find()) {
-            quoted.add(qm.group());
-            qm.appendReplacement(sb1, Matcher.quoteReplacement("\u0000" + (quoted.size() - 1) + "\u0000"));
-        }
-        qm.appendTail(sb1);
-        String s2 = sb1.toString();
-
-        // 3) 剩余裸中文（含 数字/字母+中文 混合串）-> 字符串字面量；每步先保护已带引号的串，避免重复包裹
-        String s3 = wrapBare(s2, CN);
+        // 3) 剩余裸中文 -> 字符串字面量（已带引号的内容由 wrapBare 按区间跳过，避免重复包裹）
+        String s3 = wrapBare(s, CN);
         // 4) 兜底：不含中文但含字母的连续串（如 304a）也包成字符串（函数名如 lwxs 后跟括号则跳过）
         return wrapBare(s3, MIXED);
     }
 
-    /** 将未带引号的裸串按正则包裹成字符串字面量（执行期间保护已带引号内容） */
+    /** 将未带引号的裸串按正则包裹成字符串字面量（已带引号的区间内不重复包裹） */
     private static String wrapBare(String s, Pattern p) {
-        List<String> quoted = new ArrayList<>();
+        // 先记录已带引号串的区间（不修改原串，避免占位符冲突导致串内容被错替换）
+        List<int[]> quotedRanges = new ArrayList<>();
         Matcher qm = QUOTED.matcher(s);
-        StringBuffer sb1 = new StringBuffer();
         while (qm.find()) {
-            quoted.add(qm.group());
-            qm.appendReplacement(sb1, Matcher.quoteReplacement("\u0000" + (quoted.size() - 1) + "\u0000"));
+            quotedRanges.add(new int[]{qm.start(), qm.end()});
         }
-        qm.appendTail(sb1);
-        String s2 = sb1.toString();
 
-        Matcher m = p.matcher(s2);
-        StringBuffer sb2 = new StringBuffer();
+        Matcher m = p.matcher(s);
+        StringBuffer sb = new StringBuffer();
         while (m.find()) {
-            m.appendReplacement(sb2, Matcher.quoteReplacement("\"" + m.group() + "\""));
+            boolean inQuoted = false;
+            for (int[] r : quotedRanges) {
+                if (m.start() >= r[0] && m.start() < r[1]) {
+                    inQuoted = true;
+                    break;
+                }
+            }
+            m.appendReplacement(sb, Matcher.quoteReplacement(inQuoted ? m.group() : "\"" + m.group() + "\""));
         }
-        m.appendTail(sb2);
-        String s3 = sb2.toString();
-
-        for (int i = 0; i < quoted.size(); i++) {
-            s3 = s3.replace("\u0000" + i + "\u0000", quoted.get(i));
-        }
-        return s3;
+        m.appendTail(sb);
+        return sb.toString();
     }
 
     // ==================== Token ====================
