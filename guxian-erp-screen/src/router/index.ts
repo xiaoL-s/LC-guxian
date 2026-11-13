@@ -166,7 +166,9 @@ const routes = [
     meta: { title: '库存管理', icon: 'Stock' },
     children: [
       { path: 'shelf', name: 'ShelfList', component: () => import('@/views/stock/ShelfList.vue'), meta: {
-          cacheName: 'ShelfList', title: '库位货架', icon: '' } }
+          cacheName: 'ShelfList', title: '库位货架', icon: '' } },
+      { path: 'instock', name: 'InstockList', component: () => import('@/views/stock/InstockList.vue'), meta: {
+          cacheName: 'InstockList', title: '成品入库', icon: '' } }
     ]
   },
   // ============ 生产管理 ============
@@ -241,6 +243,11 @@ const routes = [
           title: '俄罗斯方块', icon: '' } },
       { path: 'games/gomoku', name: 'GomokuGame', component: () => import('@/views/games/Gomoku.vue'), meta: {
           title: '五子棋', icon: '' } },
+      { path: 'games/chess', name: 'ChessGame', component: () => import('@/views/games/ChineseChess.vue'), meta: {
+          title: '中国象棋', icon: '' } },
+      // 系统设置：字号/密度/侧栏/斑马纹/打印留白（放在通配路由之前，否则会被兜底页吃掉）
+      { path: 'settings', name: 'GxSettings', component: () => import('@/views/mini/Settings.vue'), meta: {
+          title: '系统设置', icon: '' } },
       { path: ':pathMatch(.*)*', component: () => import('@/views/common/ComingSoon.vue'), meta: { title: '小程序配置' } }
     ]
   },

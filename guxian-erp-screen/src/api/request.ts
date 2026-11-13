@@ -2,9 +2,10 @@ import axios from 'axios'
 import { ElMessage } from 'element-plus'
 
 // 不要写完整地址！用代理，直接写 /system
+// 超时：默认 30s；批量打印/导出这类耗时接口在调用处单独传 timeout 覆盖（如 { timeout: 120000 }）
 const service = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL,
-  timeout: 15000
+  timeout: 30000
   // ❌ 不要加 withCredentials: true
 })
 
@@ -55,7 +56,8 @@ service.interceptors.response.use(
       toastError('登录已过期，请重新登录')
       setTimeout(() => { window.location.href = '/login' }, 800)
     } else if (err?.code === 'ECONNABORTED') {
-      toastError('请求超时，请检查后端服务是否已启动')
+      // 面向一线员工：不暴露"后端服务是否启动"这类技术措辞
+      toastError('服务响应超时，请稍后重试；多次失败请联系管理员')
     } else {
       toastError(err?.response?.data?.msg || err?.message || '网络异常，请稍后重试')
     }

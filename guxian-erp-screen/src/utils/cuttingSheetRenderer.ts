@@ -14,6 +14,8 @@
  *   · 列宽按权重固定，数字居中、产品/备注左对齐，长文本换行不溢出
  *   · 一个订单多个产品：默认每页 11 行，超出自动分页并重复表头 + 页码
  */
+import { getSettings } from './settings'
+
 export interface PrintBlock {
   id: number
   type: 'text' | 'table' | 'qrcode' | 'line'
@@ -41,6 +43,8 @@ export interface PrintBlock {
 export interface RenderCtx {
   fields: Record<string, any>
   items: any[]
+  /** 整单全部明细（分页时合计行仍按整单统计） */
+  allItems?: any[]
   qrWork?: string
   qrCustomer?: string
   qrWorkData?: string
@@ -146,7 +150,8 @@ export const colValue = (col: string, it: any): string => {
     '孔位': () => f?.孔位 != null ? String(f.孔位) : (it?.holePos || '525'),
     '横杆': () => {
       const mat = getMatValue(f, '横杆')
-      return mat?.dim ? String(mat.dim) : (it?.crossBar || '')
+      if (mat?.dim) return mat.mult ? `${mat.dim}${X}${mat.mult}` : String(mat.dim)
+      return it?.crossBar || ''
     },
     '纱网': () => it?.netMaterial || '',
 
@@ -164,7 +169,20 @@ export const colValue = (col: string, it: any): string => {
     },
 
     '净宽': () => it?.netWidth == null ? '' : String(it.netWidth),
-    '加杆': () => it?.addRod || '',
+    '加杆': () => {
+      // 加杆列：首行是加杆方式，其后按行列出防护栏/小短杆/短横杆等下料尺寸（对齐车间纸质单写法）
+      const rod = it?.addRod || ''
+      const mats: any = f?.['型材'] || {}
+      const skip = ['外框宽', '外框高', '内框宽', '内框高', '内扇宽', '内扇高', '横杆']
+      const rows: string[] = []
+      for (const k of Object.keys(mats)) {
+        if (skip.indexOf(k) >= 0) continue
+        const v: any = mats[k]
+        if (!v || v.dim == null) continue
+        rows.push(`${k} ${v.dim}${v.mult ? X + v.mult : ''}`)
+      }
+      return [rod].concat(rows).filter(Boolean).join('\n')
+    },
     '把手': () => [it?.handle, it?.handleDirection].filter(Boolean).join(' '),
     '锁具': () => it?.lockSet || '',
     '开向': () => it?.openDirection || '',
@@ -206,7 +224,7 @@ const COL_WEIGHT: Record<string, number> = {
   '总宽×总高': 8, '总宽': 5, '总高': 5, '数量': 4.5, '颜色': 6, '固定': 5, '下固': 5,
   '外框宽×高': 8, '内框宽×高': 8, '内扇宽×高': 8, '孔位': 4, '横杆': 4.5,
   '纱网': 6.5, '上下纱宽×高': 8, '中纱宽×高': 6,
-  '加杆': 4.5, '把手': 6, '锁具': 5, '开向': 4.5, '净宽': 4.5, '备注': 6,
+  '加杆': 9, '把手': 6, '锁具': 5, '开向': 4.5, '净宽': 4.5, '备注': 6,
   '宽': 5, '高': 5, '面积': 6, '单价': 5.5, '金额': 7
 }
 
@@ -296,7 +314,7 @@ export const AUTO_SALES_COLS: SalesColDef[] = [
 ]
 
 /** 销售单动态表格：默认显示全部列（空值占位）；hideEmpty=true 时隐藏整列为空的列 */
-export function buildDynamicTable(items: any[], hideEmpty = false): string {
+export function buildDynamicTable(items: any[], hideEmpty = false, totalItems?: any[]): string {
   const filterBlank = (c: SalesColDef) =>
     c.key === 'seq' || !hideEmpty ||
     (items.length > 0 && items.some(it => String(c.get(it, 0) ?? '').trim() !== ''))
@@ -310,8 +328,9 @@ export function buildDynamicTable(items: any[], hideEmpty = false): string {
       return `<td style="${TD}${alignOf(c.label)}">${esc(v === '' ? NA : v)}</td>`
     }).join('') + '</tr>'
   ).join('')
-  const totalNum = items.reduce((s, it) => s + (Number(it?.num) || 0), 0)
-  const totalAmount = items.reduce((s, it) => s + (Number(it?.lineAmount ?? it?.amount) || 0), 0)
+  const footItems = totalItems && totalItems.length ? totalItems : items
+  const totalNum = footItems.reduce((s, it) => s + (Number(it?.num) || 0), 0)
+  const totalAmount = footItems.reduce((s, it) => s + (Number(it?.lineAmount ?? it?.amount) || 0), 0)
   const amountTxt = totalAmount > 0 ? `　金额合计：¥${totalAmount.toFixed(2)}` : ''
   const foot = `<tr><td colspan="${Math.max(list.length, 1)}" style="${TD}text-align:left;font-weight:bold;background:#f7f7f7;">合计：${totalNum} 件${amountTxt}</td></tr>`
   return `<colgroup>${list.map(c => `<col style="width:${((COL_WEIGHT[c.label] ?? 6) / list.reduce((s, x) => s + (COL_WEIGHT[x.label] ?? 6), 0) * 100).toFixed(2)}%">`).join('')}</colgroup>
@@ -321,8 +340,19 @@ export function buildDynamicTable(items: any[], hideEmpty = false): string {
 /* ==================================================================
  * 五、渲染
  * ================================================================== */
-/** A4 横向可打印高度（px，@96dpi 297×210mm，留 6mm 边距后约 745px） */
-export const PAGE_BODY_H = 745
+/** A4 横向可打印高度（px，190mm ≈ 718px，与分页容器高度对齐） */
+export const PAGE_BODY_H = 718
+
+/** 当前打印留白设置下，每页可用的高度（mm）：A4 横向 210mm 减去上边距与 6mm 下边距 */
+export function pageUsableMm(): number {
+  const top = Number(getSettings().printTopMargin) || 0
+  return Math.max(150, 210 - top - 6)
+}
+
+/** 上一条的像素值（1mm = 96/25.4 px） */
+export function pageUsablePx(): number {
+  return Math.round(pageUsableMm() * 96 / 25.4)
+}
 /** 每页明细行数：超出自动分页，重复表头并标注页码 */
 export const PAGE_ROWS = 11
 
@@ -366,7 +396,7 @@ export function renderBlocksToHtml(blocks: PrintBlock[], ctx: RenderCtx, pageInf
     }
     if (b.type === 'table') {
       if (b.dynamic) {
-        return `<table style="${pos}${hStyle}border-collapse:collapse;width:100%;table-layout:fixed;">${buildDynamicTable(items, !!b.hideEmptyCols)}</table>`
+        return `<table style="${pos}${hStyle}border-collapse:collapse;width:100%;table-layout:fixed;">${buildDynamicTable(items, !!b.hideEmptyCols, ctx.allItems && ctx.allItems.length ? ctx.allItems : items)}</table>`
       }
       const baseCols = (b.cols && b.cols.length ? b.cols : DEFAULT_COLS)
       // 默认打印全部配置列（空值显示占位符）；勾选"隐藏空列"时才隐藏整列为空的列
@@ -381,7 +411,7 @@ export function renderBlocksToHtml(blocks: PrintBlock[], ctx: RenderCtx, pageInf
         ${buildColgroup(cols)}
         <thead>${buildTableHead(cols)}</thead>
         <tbody>${body}</tbody>
-        <tfoot>${buildTableFoot(cols, items)}</tfoot>
+        <tfoot>${buildTableFoot(cols, (ctx.allItems && ctx.allItems.length ? ctx.allItems : items))}</tfoot>
       </table>`
     }
     return ''
@@ -400,14 +430,80 @@ export function renderBlocksToHtml(blocks: PrintBlock[], ctx: RenderCtx, pageInf
  */
 export function renderPrintBody(blocks: PrintBlock[], ctx: RenderCtx): string {
   const items = ctx.items || []
-  const perPage = rowsPerPage(blocks)
-  if (items.length <= perPage) return renderBlocksToHtml(blocks, ctx)
-
-  const pages = chunkItems(items, perPage)
-  return pages.map((slice, i) => {
-    const body = renderBlocksToHtml(blocks, { ...ctx, items: slice }, { index: i, total: pages.length })
-    return `<div style="page-break-after:${i === pages.length - 1 ? 'auto' : 'always'};position:relative;height:190mm;overflow:hidden;">${body}</div>`
+  const slices = splitItemsByHeight(blocks, items)
+  if (slices.length <= 1) return renderBlocksToHtml(blocks, ctx)
+  return slices.map((slice, i) => {
+    const body = renderBlocksToHtml(blocks, { ...ctx, items: slice, allItems: items }, { index: i, total: slices.length })
+    // min-height 只保证每页不低于一页高，不再 overflow:hidden，估偏时也不会把内容裁掉
+    return `<div style="page-break-after:${i === slices.length - 1 ? 'auto' : 'always'};position:relative;min-height:${pageUsableMm()}mm;">${body}</div>`
   }).join('')
+}
+
+/* 行高估算：按列宽和实际文本推算每个单元格的换行行数，避免多尺寸单元格把页面撑爆 */
+const LINE_H = 15 * 1.25
+const CELL_V_PAD = 7 * 2 + 2 * 2
+
+/** 文本显示宽度：汉字/全角按 15px，数字字母按 8px */
+function strWidth(s: string): number {
+  let w = 0
+  for (const ch of s) w += ch.charCodeAt(0) > 0x2e80 ? 15 : 8
+  return w
+}
+
+/** 单元格在给定列宽下的显示行数（\n 分段，自动换行累加） */
+function cellLines(text: string, colW: number): number {
+  const avail = Math.max(28, colW - 10)
+  let lines = 0
+  for (const seg of String(text ?? '').split('\n')) {
+    lines += Math.max(1, Math.ceil(strWidth(seg) / avail))
+  }
+  return Math.max(1, lines)
+}
+
+/** 估算单行明细渲染后的真实高度（取所有列中最高的那格） */
+export function estimateRowHeight(cols: string[], it: any, tableW: number): number {
+  const weights = cols.map(c => COL_WEIGHT[c] ?? 6)
+  const sum = weights.reduce((a, b) => a + b, 0) || 1
+  let maxLines = 1
+  cols.forEach((c, i) => {
+    const lines = cellLines(cellText(c, it), (weights[i] / sum) * tableW)
+    if (lines > maxLines) maxLines = lines
+  })
+  return Math.max(34, maxLines * LINE_H + CELL_V_PAD)
+}
+
+/**
+ * 按真实高度把明细拆页：逐行装填，装不下就换页。
+ * 固定"每页 N 行"在多尺寸列（如全防护的防护栏/小短杆多行）下会严重低估行高，导致整页被裁。
+ */
+export function splitItemsByHeight(blocks: PrintBlock[], items: any[]): any[][] {
+  const table = (blocks || []).find(b => b.type === 'table')
+  if (!table || !items.length) return [items]
+  const baseCols = table.cols && table.cols.length ? table.cols : DEFAULT_COLS
+  const cols = (table.hideEmptyCols ? visibleCols(baseCols, items) : baseCols).filter(c => c !== '产品')
+  const tableW = 1080 - (table.x || 15) - 15
+  const below = (blocks || []).filter(b => b.id !== table.id && b.y > table.y + 10).map(b => b.y)
+  const limit = below.length ? Math.min(...below) - 8 : Math.min(PAGE_BODY_H - 34, pageUsablePx() - 40)
+  const headerH = table.dynamic ? 40 : buildTableHeadRows(
+    visibleCols(baseCols, [] as any[])
+  ).length * 34
+  // 合计行（tfoot）单独占一行，预留 40px
+  const usable = Math.max(120, limit - (table.y || 0) - headerH - 40)
+  const slices: any[][] = []
+  let cur: any[] = []
+  let acc = 0
+  for (const it of items) {
+    const h = table.dynamic ? 40 : estimateRowHeight(cols, it, tableW)
+    if (cur.length && acc + h > usable) {
+      slices.push(cur)
+      cur = []
+      acc = 0
+    }
+    cur.push(it)
+    acc += h
+  }
+  if (cur.length) slices.push(cur)
+  return slices.length ? slices : [items]
 }
 
 /** 依据模板布局推算单页可容纳的明细行数 */
@@ -416,7 +512,7 @@ export function rowsPerPage(blocks: PrintBlock[]): number {
   if (!table) return PAGE_ROWS
   // 表格下方其它区块的最高位置，作为分页下边界；没有则用页底
   const below = (blocks || []).filter(b => b.id !== table.id && b.y > table.y + 10).map(b => b.y)
-  const limit = below.length ? Math.min(...below) - 8 : PAGE_BODY_H - 34
+  const limit = below.length ? Math.min(...below) - 8 : Math.min(PAGE_BODY_H - 34, pageUsablePx() - 40)
   const headerH = table.dynamic ? 40 : buildTableHeadRows(
     visibleCols(table.cols && table.cols.length ? table.cols : DEFAULT_COLS, [])
   ).length * 34
@@ -426,11 +522,21 @@ export function rowsPerPage(blocks: PrintBlock[]): number {
   return Math.max(3, Math.floor(usable / rowH))
 }
 
-export const PRINT_PAGE_CSS = '@page{size:A4 landscape;margin:12mm 6mm 6mm 6mm;}body{margin:0;padding:0;}'
+/**
+ * 打印页面的 @page 规则。
+ * 顶部留白从「系统设置」读取：不同打印机进纸位置有偏差，留白太小会把顶部二维码切掉。
+ */
+export function getPrintPageCss(): string {
+  const top = getSettings().printTopMargin
+  return `@page{size:A4 landscape;margin:${top}mm 6mm 6mm 6mm;}body{margin:0;padding:0;}`
+}
+
+/** 兼容旧引用：按当前设置生成一次（真正打印时用 getPrintPageCss() 取最新值） */
+export const PRINT_PAGE_CSS = getPrintPageCss()
 
 export function wrapPrintDocument(bodyHtml: string, title = '生产单'): string {
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${esc(title)}</title>
-<style>${PRINT_PAGE_CSS}
+<style>${getPrintPageCss()}
 table{page-break-inside:auto}
 tr{page-break-inside:avoid;page-break-after:auto}
 thead{display:table-header-group}
@@ -622,59 +728,98 @@ function injectFields(html: string, ctx: RenderCtx): string {
   return html.replace(/\$\{(\w+)\}/g, (_m, key) => esc(ctx.fields?.[key] ?? NA))
 }
 
-/** 通用模板加载：按类型取默认启用模板，读不到回退内置版式 */
-async function loadTemplate(type: string, fallback: () => PrintBlock[]): Promise<{ blocks?: PrintBlock[]; rawHtml?: string }> {
+/** 产品匹配键：dictType:dictValue（与模板「适用产品」对应） */
+const productKeyOf = (it: any) =>
+  (it?.dictType && it?.dictValue != null) ? `${it.dictType}:${it.dictValue}` : ''
+
+/** 拉取某单据类型的启用模板列表（批量打印只请求一次，各单复用） */
+async function fetchTemplates(type: string): Promise<any[]> {
   try {
     const api: any = await import('../api/system/printTemplate.ts')
-    const res: any = await api.getPrintTemplatePage(1, 100, '', type, 1)
-    const list: any[] = res?.data?.records || []
-    if (!list.length) return { blocks: fallback() }
-    const tpl = list.find((t: any) => t.isDefault === 1) || list[0]
+    const res: any = await api.getPrintTemplatePage(1, 200, '', type, 1)
+    return res?.data?.records || []
+  } catch (e) {
+    console.warn('[打印] 读取打印模板失败，使用内置默认版式', e)
+    return []
+  }
+}
+
+/**
+ * 选模板：订单中只要有产品命中模板的「适用产品」就用它（多产品单取第一个命中的）；
+ * 都不命中用默认模板，没有默认模板用第一条，都没有则回退内置版式。
+ */
+function pickTemplate(list: any[], items: any[] | undefined, fallback: () => PrintBlock[], forceId?: number | null) {
+  let tpl: any = null
+  // 打印时手动指定了模板，就直接用它（找不到再退回自动匹配）
+  if (forceId != null) tpl = list.find((t: any) => Number(t.templateId) === Number(forceId)) || null
+  if (!tpl) {
+    const keys = (items || []).map(productKeyOf).filter(Boolean)
+    for (const key of keys) {
+      tpl = list.find((t: any) => String(t.bindProducts || '').split(',').map(s => s.trim()).includes(key))
+      if (tpl) break
+    }
+  }
+  if (!tpl) tpl = list.find((t: any) => t.isDefault === 1) || list[0]
+  try {
     const content = String(tpl?.templateContent || '').trim()
     if (!content) return { blocks: fallback() }
     if (content.startsWith('<')) return { rawHtml: content }
     const parsed = JSON.parse(content)
     if (Array.isArray(parsed) && parsed.length) return { blocks: parsed as PrintBlock[] }
   } catch (e) {
-    console.warn('[打印] 读取打印模板失败，使用内置默认版式', e)
+    console.warn('[打印] 打印模板内容解析失败，使用内置默认版式', e)
   }
   return { blocks: fallback() }
 }
 
-export const loadWorkOrderTemplate = () => loadTemplate('WORK_ORDER', buildDefaultBlocks)
-export const loadSalesTemplate = () => loadTemplate('SALES_ORDER', buildSalesDefaultBlocks)
+export const loadWorkOrderTemplate = async (items?: any[], forceId?: number | null) =>
+  pickTemplate(await fetchTemplates('WORK_ORDER'), items, buildDefaultBlocks, forceId)
+export const loadSalesTemplate = async (items?: any[], forceId?: number | null) =>
+  pickTemplate(await fetchTemplates('SALES_ORDER'), items, buildSalesDefaultBlocks, forceId)
+
+/** 列出某单据类型的启用模板（供打印时手动选择模板用） */
+export const listPrintTemplates = async (type: 'WORK_ORDER' | 'SALES_ORDER') => {
+  const list = await fetchTemplates(type)
+  return list.map((t: any) => ({
+    id: Number(t.templateId),
+    name: String(t.templateName || ''),
+    isDefault: Number(t.isDefault) === 1,
+    bindCount: String(t.bindProducts || '').split(',').filter((s: string) => s.trim().length > 0).length
+  }))
+}
 
 /* ==================================================================
  * 九、对外打印入口
  * ================================================================== */
 /** 【生产单】渲染完整打印 HTML（多产品超过一页自动分页） */
-export async function renderWorkOrderHtml(detail: any, title = '生产单'): Promise<string> {
+export async function renderWorkOrderHtml(detail: any, title = '生产单', templateId?: number | null): Promise<string> {
   const ctx = buildPrintContext(detail)
   await prepareQrData(ctx)
-  const tpl = await loadWorkOrderTemplate()
+  const tpl = await loadWorkOrderTemplate(detail?.orderItems, templateId)
   const body = tpl.rawHtml ? injectFields(tpl.rawHtml, ctx) : renderPrintBody(tpl.blocks!, ctx)
   return wrapPrintDocument(body, title)
 }
 
-/** 【批量生产单】多张生产单合并打印，每张分页 */
-export async function renderWorkOrdersHtml(details: any[], title = '批量生产单'): Promise<string> {
-  const tpl = await loadWorkOrderTemplate()
+/** 【批量生产单】多张生产单合并打印，每张分页；不同产品各自用各自绑定的模板 */
+export async function renderWorkOrdersHtml(details: any[], title = '批量生产单', templateId?: number | null): Promise<string> {
+  const list = await fetchTemplates('WORK_ORDER')
   const pages: string[] = []
   for (const d of details || []) {
     const ctx = buildPrintContext(d)
     await prepareQrData(ctx)
+    const tpl = pickTemplate(list, d?.orderItems, buildDefaultBlocks, templateId)
     const body = tpl.rawHtml ? injectFields(tpl.rawHtml, ctx) : renderPrintBody(tpl.blocks!, ctx)
-    // 每个工单单独一页，position:relative让内部绝对定位元素相对于本页定位，height固定避免重叠
-    pages.push(`<div style="page-break-after:always;position:relative;height:190mm;overflow:hidden;">${body}</div>`)
+    // 每个工单单独一页，position:relative让内部绝对定位元素相对于本页定位
+    pages.push(`<div style="page-break-after:always;position:relative;min-height:${pageUsableMm()}mm;">${body}</div>`)
   }
   return wrapPrintDocument(pages.join(''), title)
 }
 
 /** 【销售单】渲染完整打印 HTML */
-export async function renderSalesOrderHtml(order: any, title = '销售单'): Promise<string> {
+export async function renderSalesOrderHtml(order: any, title = '销售单', templateId?: number | null): Promise<string> {
   const ctx = buildSalesContext(order)
   await prepareQrData(ctx)
-  const tpl = await loadSalesTemplate()
+  const tpl = await loadSalesTemplate(order?.orderItems, templateId)
   const body = tpl.rawHtml ? injectFields(tpl.rawHtml, ctx) : renderPrintBody(tpl.blocks!, ctx)
   return wrapPrintDocument(body, title)
 }

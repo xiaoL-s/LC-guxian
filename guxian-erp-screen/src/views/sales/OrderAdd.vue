@@ -136,24 +136,14 @@
           <div class="detail-tools">
             <el-button size="small" @click="openDeduct">扣宽</el-button>
             <el-button size="small" type="primary" @click="addProduct">＋ 添加产品</el-button>
-            <el-button size="small" @click="appendProduct">追加产品</el-button>
-            <el-dropdown trigger="click" @command="onMoreCommand">
-              <el-button size="small">更多</el-button>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item command="copyInsert">插入复制当前卡</el-dropdown-item>
-                  <el-dropdown-item command="delete">删除当前卡</el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
           </div>
         </div>
       </template>
 
       <div class="pcard-list">
         <div v-for="(row, idx) in order.itemList" :key="idx"
-             class="pcard" :class="{ active: idx === currentRowIndex }"
-             @click="currentRowIndex = idx">
+             class="pcard" :class="{ active: idx === currentRowIndex, err: errorIdx === idx }"
+             @click="currentRowIndex = Number(idx); errorIdx = -1">
           <!-- 卡片头：产品选择 + 品目 + 操作 -->
           <div class="pcard-head">
             <el-select v-model="row.productKey" filterable clearable placeholder="① 选择产品"
@@ -172,14 +162,13 @@
 
           <!-- 尺寸 -->
           <div class="pcard-grid g4">
-            <label class="fld"><span>总高(mm)</span>
-              <el-input-number v-model="row.height" :min="0" :controls="false" style="width:100%" @change="() => calcRow(row)" /></label>
+            <!-- 按图纸习惯：先宽后高（打印单也是"总宽×总高"） -->
             <label class="fld"><span>总宽(mm)</span>
               <el-input-number v-model="row.width" :min="0" :controls="false" style="width:100%" @change="() => calcRow(row)" /></label>
+            <label class="fld"><span>总高(mm)</span>
+              <el-input-number v-model="row.height" :min="0" :controls="false" style="width:100%" @change="() => calcRow(row)" /></label>
             <label class="fld"><span>下固定</span>
-              <el-select v-model="row.fixedBottom" filterable allow-create default-first-option clearable style="width:100%">
-                <el-option v-for="o in attrOptions(row, { prop: 'fixedBottom', dictKey: 'fixed_bottom' })" :key="o.value + '-' + o.label" :label="o.label" :value="o.label" />
-              </el-select></label>
+              <el-input v-model="row.fixedBottom" clearable style="width:100%" @change="() => calcRow(row)" /></label>
             <label class="fld"><span>数量</span>
               <el-input-number v-model="row.num" :min="1" :controls="false" style="width:100%" @change="() => calcRow(row)" /></label>
           </div>
@@ -325,7 +314,7 @@
 
 <script setup lang="ts">
 defineOptions({ name: 'OrderAdd' })
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getOrderDictOptions, getOrderInfo, saveOrder } from '@/api/sales/order'
@@ -341,6 +330,10 @@ const saving = ref(false)
 const itemTableRef = ref()
 const selectedRows = ref<any[]>([])
 const currentRowIndex = ref(0)
+/** 新录入的客户名：保存订单时才建档，避免边输边写库产生垃圾客户 */
+const pendingCustomerName = ref('')
+/** 保存校验未通过的行下标：用于高亮并滚动定位到那一行 */
+const errorIdx = ref(-1)
 
 /** 计算 N 天后的日期（本地时区，格式 yyyy-MM-dd） */
 const addDays = (days: number) => {
@@ -425,7 +418,7 @@ const order = reactive<any>({
   orderId: undefined, orderNo: '', customerId: undefined, customerName: '', contact: '', phone: '',
   terminalAddress: '', logistics: '', unit: '套', brand: '', installType: '客户安装',
   designer: '', splitter: '', salesman: '', customerSource: '',
-  orderDate: new Date().toISOString().slice(0, 10), expectDate: addDays(7),
+  orderDate: addDays(0), expectDate: addDays(7),
   projectionArea: 0, bigBoardNum: 0,
   craftFee: 0, urgentFee: 0, freight: 0, discountAmount: 0, remark: '',
   itemList: [blankItem()]
@@ -544,35 +537,20 @@ const onCustomerChange = async (val: any) => {
     }
     return
   }
-  // 字符串 = 输入的新客户名：自动添加到系统，拿回 customerId
+  // 字符串 = 手输的新客户名：这里只记住名字，保存订单时才建档
+  // （原先一输入就写客户表，输错一个字就多一条垃圾客户）
   const name = String(val).trim()
   if (!name) return
-  try {
-    const res: any = await saveCustomer({ customerName: name } as any)
-    if (res.code === 200) {
-      order.customerId = typeof res.data === 'number' ? res.data : undefined
-      order.customerName = name
-      order.contact = ''
-      order.phone = ''
-      await loadCustomers()
-      // 兜底：若接口未返回ID，按名字从最新列表匹配
-      if (!order.customerId) {
-        const found = customers.value.find(c => c.customerName === name)
-        if (found) order.customerId = found.customerId
-      }
-      ElMessage.success(`新客户「${name}」已自动添加到系统`)
-    } else {
-      ElMessage.error(res.msg || '新客户添加失败')
-    }
-  } catch (e) {
-    console.error(e)
-    ElMessage.error('新客户添加失败，请检查客户服务是否启动')
-  }
+  pendingCustomerName.value = name
+  order.customerId = undefined
+  order.customerName = name
+  order.contact = ''
+  order.phone = ''
+  ElMessage.info(`新客户「${name}」将在保存订单时自动建档`)
 }
 
 // ---------------- 明细行操作 ----------------
 const addProduct = () => { order.itemList.push(blankItem()) }
-const appendProduct = () => { order.itemList.push(blankItem()); ElMessage.success('已追加一行产品') }
 const insertProduct = (index?: number) => {
   const i = typeof index === 'number' ? index + 1 : currentRowIndex.value
   order.itemList.splice(i, 0, blankItem())
@@ -581,19 +559,24 @@ const copyRow = (index: number) => {
   const src = order.itemList[index]
   order.itemList.splice(index + 1, 0, { ...src })
 }
-const removeRow = (index: number) => {
+const removeRow = async (index: number) => {
   if (order.itemList.length <= 1) { ElMessage.warning('至少保留一行产品明细'); return }
+  const row: any = order.itemList[index]
+  // 空行直接删；已经填过产品/尺寸的行要确认，避免误点丢掉一张录好的产品
+  if (row?.productName || row?.width || row?.height) {
+    try {
+      await ElMessageBox.confirm(
+        `确认删除第 ${index + 1} 行「${row.productName || '未选产品'}」？删除后需要重新录入。`,
+        '删除产品行', { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
+      )
+    } catch { return }
+  }
   order.itemList.splice(index, 1)
+  if (currentRowIndex.value >= order.itemList.length) currentRowIndex.value = order.itemList.length - 1
 }
 const onSelectionChange = (rows: any[]) => { selectedRows.value = rows }
 const onRowClick = (row: any) => {
   currentRowIndex.value = order.itemList.indexOf(row)
-}
-const onMoreCommand = (cmd: string) => {
-  const idx = currentRowIndex.value
-  if (cmd === 'copyInsert') copyRow(idx)
-  else if (cmd === 'copy') navigator.clipboard?.writeText(JSON.stringify(order.itemList[idx])).then(() => ElMessage.success('已复制该行数据'))
-  else if (cmd === 'delete') removeRow(idx)
 }
 
 /** 扣宽：应用到当前高亮卡片（点击卡片即选中） */
@@ -634,8 +617,8 @@ const openFormula = async (row: any) => {
     if (row.handle) params.把手 = row.handle
     if (row.handleDirection) params.把手方向 = row.handleDirection
     if (row.addRod) params.加杆 = row.addRod
-    const fb = Number(row.fixedBottom)
-    params.下固定 = Number.isNaN(fb) ? 0 : fb
+    const fbTxt = String(row.fixedBottom ?? "").trim()
+    if (fbTxt !== "" && !Number.isNaN(Number(fbTxt))) params.下固定 = Number(fbTxt)   // 不填就不传，按未填处理
     const res: any = await testDictFormula({ dictType: row.dictType, dictValue: row.dictValue, params })
     if (res.code === 200) formulaResult.value = res.data
     else ElMessage.error(res.msg || '公式计算失败')
@@ -707,27 +690,71 @@ const num = (v?: number) => {
   return Number.isInteger(n) ? String(n) : n.toFixed(2)
 }
 
-const resetForm = () => {
+/** 清空为一张空白新单（内部复用：保存成功后调用，不弹确认） */
+const applyBlank = () => {
   Object.assign(order, {
     orderId: undefined, orderNo: '', customerId: undefined, customerName: '', contact: '', phone: '',
     terminalAddress: '', logistics: '', unit: '套', brand: '', installType: '客户安装',
     designer: '', splitter: '', salesman: '', customerSource: '',
-    orderDate: new Date().toISOString().slice(0, 10), expectDate: addDays(7),
+    // 用本地时区取当天，避免晚上 8 点后 toISOString 变成次日
+    orderDate: addDays(0), expectDate: addDays(7),
     projectionArea: 0, bigBoardNum: 0, craftFee: 0, urgentFee: 0, freight: 0, discountAmount: 0,
     remark: '', itemList: [blankItem()]
   })
+  pendingCustomerName.value = ''
+  errorIdx.value = -1
+  currentRowIndex.value = 0
+}
+
+/** 手动点「重置」：整单清空前先确认，避免误点丢掉刚录的内容 */
+const resetForm = async () => {
+  const hasData = order.itemList.some((r: any) => r.productName || r.width || r.height)
+  if (hasData || order.customerName) {
+    try {
+      await ElMessageBox.confirm('确定重置整张订单？已填的客户与产品信息都会被清空。', '重置订单',
+        { type: 'warning', confirmButtonText: '重置', cancelButtonText: '取消' })
+    } catch { return }
+  }
+  applyBlank()
+  ElMessage.success('已重置')
 }
 
 const goBack = () => router.push('/sales/order/entry')
 
 const submit = async () => {
-  // 客户必须是数字ID（在库客户 或 已自动创建成功的新客户）；杜绝字符串客户名被当ID提交
-  if (!order.customerId || typeof order.customerId !== 'number') {
-    ElMessage.warning('请选择客户，或输入新客户名并等待自动添加成功')
+  const bad = order.itemList.findIndex((r: any) => !r.productName || !r.width || !r.height)
+  if (bad >= 0) {
+    // 提示的同时把出问题的那张卡高亮并滚动到视野内，不用让员工自己数"第几行"
+    errorIdx.value = bad
+    ElMessage.warning(`第 ${bad + 1} 行请完善产品、总宽、总高`)
+    await nextTick()
+    document.querySelectorAll('.pcard')[bad]?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     return
   }
-  const bad = order.itemList.findIndex((r: any) => !r.productName || !r.width || !r.height)
-  if (bad >= 0) { ElMessage.warning(`第 ${bad + 1} 行请完善产品、总宽、总高`); return }
+  // 客户：在库客户直接用；手输的新客户名在这一步才建档（失败就不落单，避免产生脏客户）
+  if (!order.customerId && pendingCustomerName.value) {
+    const name = pendingCustomerName.value
+    try {
+      const res: any = await saveCustomer({ customerName: name } as any)
+      if (res.code !== 200) { ElMessage.error(res.msg || '新客户建档失败'); return }
+      order.customerId = typeof res.data === 'number' ? res.data : undefined
+      if (!order.customerId) {
+        await loadCustomers()
+        const found = customers.value.find(c => c.customerName === name)
+        if (found) order.customerId = found.customerId
+      }
+      ElMessage.success(`新客户「${name}」已加入系统`)
+      pendingCustomerName.value = ''
+    } catch (e) {
+      console.error(e)
+      ElMessage.error('新客户建档失败，请检查客户服务是否启动')
+      return
+    }
+  }
+  if (!order.customerId || typeof order.customerId !== 'number') {
+    ElMessage.warning('请选择客户，或输入新客户名（保存时会自动建档）')
+    return
+  }
   saving.value = true
   try {
     // 去掉仅用于下拉回显的 productKey，避免提交多余字段
@@ -744,7 +771,7 @@ const submit = async () => {
       // 新增订单：后端返回工单生成情况（拆单失败也会明确提示，不再静默）
       ElMessage.success(order.orderId ? '修改成功' : (res.data || '订单已保存'))
       // 保存成功后清空表单，下次进入是空白状态（中途切页面仍会保留未保存的内容）
-      resetForm()
+      applyBlank()
       router.push('/sales/order/entry')
     }
   } catch (e) {
@@ -820,6 +847,8 @@ onMounted(async () => {
   cursor: pointer; transition: all .15s; }
 .pcard:hover { border-color: #a0cfff; box-shadow: 0 2px 10px rgba(64,158,255,.10); }
 .pcard.active { border-color: #409eff; box-shadow: 0 0 0 2px rgba(64,158,255,.15); }
+/* 保存校验未通过的行：红框高亮 + 轻微摇晃，配合自动滚动让人一眼找到 */
+.pcard.err { border-color: #f56c6c; box-shadow: 0 0 0 2px rgba(245,108,108,.18); }
 .pcard-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
 .pcard-ops { display: flex; gap: 2px; flex-shrink: 0; }
 .pcard-grid { display: grid; gap: 8px 10px; margin-bottom: 10px; }

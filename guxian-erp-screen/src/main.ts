@@ -11,6 +11,9 @@ import './theme.css'
 // 主题持久化恢复（刷新后记住上次选择）
 import { initTheme } from './utils/theme'
 initTheme()
+// 界面偏好（字号/密度/斑马纹/侧栏宽度）持久化恢复
+import { initSettings } from './utils/settings'
+initSettings()
 // 引入中文语言包
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 

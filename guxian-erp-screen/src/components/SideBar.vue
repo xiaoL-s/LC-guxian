@@ -1,9 +1,13 @@
 <template>
   <div class="sidebar" :class="{ collapse: isCollapse }">
-    <template v-for="item in menuList" :key="item.id">
+    <!-- 菜单搜索：一级+二级菜单越来越多，靠滚找太慢 -->
+    <div v-if="!isCollapse" class="menu-search">
+      <el-input v-model="keyword" size="small" clearable placeholder="搜索菜单..." />
+    </div>
+    <template v-for="item in visibleMenus" :key="item.id">
       <div class="menu-item">
-        <!-- 收缩状态禁止展开子菜单 -->
-        <div class="menu-title" @click="!isCollapse && onMenuClick(item)">
+        <!-- 收缩状态点击也要有反馈：自动展开侧栏 -->
+        <div class="menu-title" @click="onMenuClick(item)">
           <component
             v-if="item.icon"
             :is="iconMap[item.icon]"
@@ -41,7 +45,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 // 导入antd图标
 import {
@@ -81,6 +85,22 @@ const props = defineProps<{
   isCollapse: boolean
 }>()
 
+const emit = defineEmits<{ (e: 'expand-sidebar'): void }>()
+
+// ========== 菜单搜索（一级/二级名称匹配；搜索时全部展开便于定位） ==========
+const keyword = ref('')
+const visibleMenus = computed(() => {
+  const kw = keyword.value.trim()
+  if (!kw) return props.menuList || []
+  return (props.menuList || [])
+    .map((m: any) => {
+      const children = (m.children || []).filter((c: any) => String(c.menuName || '').includes(kw))
+      if (String(m.menuName || '').includes(kw)) return { ...m }
+      return children.length ? { ...m, children } : null
+    })
+    .filter(Boolean) as any[]
+})
+
 // ========== 展开状态管理（独立 Set，不依赖对象属性） ==========
 const expandedNames = ref<Set<string>>(new Set())
 
@@ -99,8 +119,8 @@ const saveToStorage = () => {
   localStorage.setItem('menu_expanded', JSON.stringify([...expandedNames.value]))
 }
 
-// 判断菜单是否展开
-const isExpanded = (name: string) => expandedNames.value.has(name)
+// 判断菜单是否展开（搜索状态下强制展开，方便看到匹配到的子菜单）
+const isExpanded = (name: string) => (keyword.value.trim() ? true : expandedNames.value.has(name))
 
 // 切换展开/收起
 const toggleExpand = (item: any) => {
@@ -117,6 +137,8 @@ const toggleExpand = (item: any) => {
 
 // 顶级菜单点击
 const onMenuClick = (item: any) => {
+  // 折叠状态下点图标：先把侧栏展开，否则点了完全没反应
+  if (props.isCollapse) { emit('expand-sidebar'); return }
   if (item.children && item.children.length > 0) {
     toggleExpand(item)
   } else if (item.path) {
@@ -154,8 +176,7 @@ watch(() => props.menuList, (newList) => {
 
 <style scoped lang="scss">
 .sidebar {
-  width: var(--gx-sidebar-w, 180px);
-  height: 100vh;
+  width: var(--gx-sidebar-w, 180px);  height: 100vh;
   padding: 16px 10px;
   box-sizing: border-box;
   background: var(--gx-sidebar-bg);
@@ -184,9 +205,17 @@ watch(() => props.menuList, (newList) => {
   }
 }
 
+.menu-search {
+  margin: 0 4px 10px;
+
+  :deep(.el-input__wrapper) {
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.9);
+  }
+}
+
 .menu-item {
   margin-bottom: 4px;
-
   .menu-title {
     display: flex;
     justify-content: space-between;

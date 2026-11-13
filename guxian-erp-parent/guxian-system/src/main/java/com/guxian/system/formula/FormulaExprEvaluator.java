@@ -299,6 +299,10 @@ public final class FormulaExprEvaluator {
             if ("lwxs".equals(name)) { // 占位：恒等系数函数，后续可按真实口径替换
                 return args.isEmpty() ? 0d : args.get(0);
             }
+            if ("jw".equals(name)) { // 进一取整（老系统 jw()）：不足整按 1 计，如 1.61 → 2
+                if (args.isEmpty()) return 0d;
+                return Math.ceil(asNum(args.get(0), "jw"));
+            }
             throw new IllegalArgumentException("未定义函数: " + name);
         }
 

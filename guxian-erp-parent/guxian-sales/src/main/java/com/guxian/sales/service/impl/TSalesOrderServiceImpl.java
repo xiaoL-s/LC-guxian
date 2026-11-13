@@ -85,6 +85,9 @@ public class TSalesOrderServiceImpl extends ServiceImpl<TSalesOrderMapper, TSale
     private SysDictTypeMapper dictTypeMapper;
     @Resource
     private SysDictDataMapper dictDataMapper;
+    /** 打印/拆单这类跨服务调用，本地写操作收窄成独立小事务，避免长事务持锁与生产服务互等 */
+    @Resource
+    private org.springframework.transaction.support.TransactionTemplate transactionTemplate;
 
     // ==================================================================
     // 订单维度（订单列表 / 进度跟踪）
@@ -300,9 +303,9 @@ public class TSalesOrderServiceImpl extends ServiceImpl<TSalesOrderMapper, TSale
                         putIfText(params, "把手", in.getHandle());
                         putIfText(params, "把手方向", in.getHandleDirection());
                         putIfText(params, "加杆", in.getAddRod());
-                        // 下固定：优先转数字（公式按“下固定>0/下固定=0”判断），转不了按 0 处理
+                        // 下固定：不填就不传这个变量（公式里未传的可选变量按 0 判分支），不再硬塞 0
                         BigDecimal fbNum = parseNum(in.getFixedBottom());
-                        params.put("下固定", fbNum != null ? fbNum : BigDecimal.ZERO);
+                        if (fbNum != null) params.put("下固定", fbNum);   // 不填按未传处理，公式按 0 走分支，单子上留空不写 0
                         params.put("单价", unitPrice);
 
                         Map<String, Object> result = callFormulaCalc(
@@ -618,16 +621,22 @@ public class TSalesOrderServiceImpl extends ServiceImpl<TSalesOrderMapper, TSale
         if (pass) {
             upd.setOrderStatus(OrderStatusEnum.AUDITED.getCode());
             upd.setRejectReason(null);
-            baseMapper.updateById(upd);
-            updateItemStatus(orderId, OrderStatusEnum.AUDITED.getCode(), null);
+            // 本地标记放进独立小事务：调用 8085 拆单必须在事务外，否则两边同时写 t_sales_order_item 会互等行锁
+            transactionTemplate.executeWithoutResult(status -> {
+                baseMapper.updateById(upd);
+                updateItemStatus(orderId, OrderStatusEnum.PRODUCING.getCode(), null);
+            });
         } else {
             if (!StringUtils.hasText(rejectReason)) {
                 throw new BusinessException("驳回必须填写驳回原因");
             }
             upd.setOrderStatus(OrderStatusEnum.REJECTED.getCode());
             upd.setRejectReason(rejectReason);
-            baseMapper.updateById(upd);
-            updateItemStatus(orderId, OrderStatusEnum.PENDING_AUDIT.getCode(), null);
+            // 本地标记放进独立小事务：调用 8085 拆单必须在事务外，否则两边同时写 t_sales_order_item 会互等行锁
+            transactionTemplate.executeWithoutResult(status -> {
+                baseMapper.updateById(upd);
+                updateItemStatus(orderId, OrderStatusEnum.PRODUCING.getCode(), null);
+            });
         }
     }
 
@@ -657,6 +666,7 @@ public class TSalesOrderServiceImpl extends ServiceImpl<TSalesOrderMapper, TSale
         baseMapper.updateById(upd);
     }
 
+
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void settle(Long orderId) {
@@ -666,6 +676,7 @@ public class TSalesOrderServiceImpl extends ServiceImpl<TSalesOrderMapper, TSale
         upd.setFinanceStatus(FinanceStatusEnum.SETTLED.getCode());
         baseMapper.updateById(upd);
     }
+
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -707,7 +718,6 @@ public class TSalesOrderServiceImpl extends ServiceImpl<TSalesOrderMapper, TSale
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
     public List<Map<String, Object>> printOrders(List<Long> orderIds) {
         if (orderIds == null || orderIds.isEmpty()) {
             throw new BusinessException("请先勾选要打印的订单");
@@ -746,6 +756,14 @@ public class TSalesOrderServiceImpl extends ServiceImpl<TSalesOrderMapper, TSale
             // 已打印过：直接返回工单信息，不重复拆单（公式已重算，getDetail 实时读新数据）
             if (alreadyPrinted) {
                 Long workId = workOrderCheckMapper.workIdBySalesOrderId(orderId);
+                // 历史卡单：早期打印没生成工单，这里补建；失败不阻断打印（前端会退化成订单详情出单）
+                if (workId == null || workId <= 0) {
+                    try {
+                        workId = requestSplitWorkOrder(orderId);
+                    } catch (BusinessException e) {
+                        log.warn("已打印订单补建工单失败，按订单详情打印：订单={} 原因={}", orderId, e.getMessage());
+                    }
+                }
                 row.put("workId", workId);
                 row.put("workNo", workOrderCheckMapper.latestWorkNo(orderId));
                 row.put("success", true);
@@ -754,9 +772,21 @@ public class TSalesOrderServiceImpl extends ServiceImpl<TSalesOrderMapper, TSale
                 continue;
             }
 
-            // 未打印：直接标记已打印（不拆单，用户不需要生成生产工单）
-            Long existWorkId = 0L;
-            boolean splitAlreadyExists = false;
+            // 未打印：先确保有生产工单（1 个订单 → 1 个工单，不按产品拆）。
+            // 生产单二维码、扫码报工、工序流转都靠 workId；返回 0 会让前端静默不打印。
+            Long workId = workOrderCheckMapper.workIdBySalesOrderId(orderId);
+            boolean workCreated = false;
+            if (workId == null || workId <= 0) {
+                try {
+                    workId = requestSplitWorkOrder(orderId);
+                    workCreated = true;
+                } catch (BusinessException e) {
+                    row.put("success", false);
+                    row.put("msg", "生成生产工单失败：" + e.getMessage());
+                    result.add(row);
+                    continue;
+                }
+            }
 
             // 拆单成功或已存在工单：标记已打印 + 订单状态=生产中（开工），工单号=订单号
             String operatorName = "系统";
@@ -779,15 +809,67 @@ public class TSalesOrderServiceImpl extends ServiceImpl<TSalesOrderMapper, TSale
             String newRemark = (oldRemark == null || oldRemark.isEmpty()) ? printLog : oldRemark + " | " + printLog;
             upd.setRemark(newRemark);
 
-            baseMapper.updateById(upd);
-            updateItemStatus(orderId, OrderStatusEnum.PRODUCING.getCode(), null);
+            // 本地标记放进独立小事务：调用 8085 拆单必须在事务外，否则两边同时写 t_sales_order_item 会互等行锁
+            transactionTemplate.executeWithoutResult(status -> {
+                baseMapper.updateById(upd);
+                updateItemStatus(orderId, OrderStatusEnum.PRODUCING.getCode(), null);
+            });
 
-            row.put("workId", existWorkId);
+            row.put("workId", workId);
             row.put("workNo", workOrderCheckMapper.latestWorkNo(orderId));
             row.put("success", true);
-            row.put("msg", splitAlreadyExists ? "打印成功（工单已存在，重新打印）" : "打印成功，订单已开工");
+            row.put("msg", workCreated ? "打印成功，订单已开工" : "打印成功（工单已存在，重新打印）");
+            result.add(row);
         }
         return result;
+    }
+
+    /**
+     * 调生产服务生成生产工单（1 个订单 → 1 个工单，工单号=订单号，不按产品拆）。
+     * 打印生产单时调用：没有工单，生产单二维码、扫码报工、工序流转都没有载体。
+     */
+    private Long requestSplitWorkOrder(Long orderId) {
+        try {
+            String token = currentToken();
+            HttpClient client = HttpClient.newBuilder()
+                    .connectTimeout(Duration.ofSeconds(5))
+                    .build();
+            HttpRequest.Builder rb = HttpRequest.newBuilder()
+                    .uri(URI.create("http://127.0.0.1:8085/production/workorder/split?salesOrderId=" + orderId))
+                    .timeout(Duration.ofSeconds(60))
+                    .POST(HttpRequest.BodyPublishers.noBody());
+            if (!token.isEmpty()) {
+                rb.header("Authorization", token);
+            }
+            HttpResponse<String> resp = client.send(rb.build(), HttpResponse.BodyHandlers.ofString());
+            if (resp.statusCode() != 200) {
+                throw new BusinessException("生产服务返回 HTTP " + resp.statusCode() + "，请查看生产模块日志");
+            }
+            com.fasterxml.jackson.databind.JsonNode node =
+                    new com.fasterxml.jackson.databind.ObjectMapper().readTree(resp.body());
+            int code = node.path("code").asInt(-1);
+            if (code != 200) {
+                throw new BusinessException(node.path("msg").asText("生成工单失败"));
+            }
+            com.fasterxml.jackson.databind.JsonNode data = node.path("data");
+            if (data.isMissingNode() || data.isNull()) {
+                throw new BusinessException("生产服务未返回工单ID");
+            }
+            return data.asLong();
+        } catch (java.net.ConnectException e) {
+            throw new BusinessException("生产服务(8085)未启动，请先启动 guxian-produce 模块");
+        } catch (java.io.IOException e) {
+            // 读超时/连接中断都不等于没建成：8085 可能已经落库，回查一次再判定，避免"第一次打印必失败"
+            Long existWorkId = workOrderCheckMapper.workIdBySalesOrderId(orderId);
+            if (existWorkId != null && existWorkId > 0) {
+                log.warn("调用生产服务超时，但工单已生成 workId={}，按成功处理", existWorkId);
+                return existWorkId;
+            }
+            throw new BusinessException("生成生产工单超时（" + e.getMessage() + "），请稍后重试");
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new BusinessException("调用生产服务被中断");
+        }
     }
 
     @Override
@@ -800,8 +882,11 @@ public class TSalesOrderServiceImpl extends ServiceImpl<TSalesOrderMapper, TSale
         TSalesOrder upd = new TSalesOrder();
         upd.setOrderId(orderId);
         upd.setOrderStatus(OrderStatusEnum.FINISHED.getCode());
-        baseMapper.updateById(upd);
-        updateItemStatus(orderId, OrderStatusEnum.FINISHED.getCode(), 100);
+            // 本地标记放进独立小事务：调用 8085 拆单必须在事务外，否则两边同时写 t_sales_order_item 会互等行锁
+            transactionTemplate.executeWithoutResult(status -> {
+                baseMapper.updateById(upd);
+                updateItemStatus(orderId, OrderStatusEnum.PRODUCING.getCode(), null);
+            });
     }
 
     @Override
@@ -815,8 +900,11 @@ public class TSalesOrderServiceImpl extends ServiceImpl<TSalesOrderMapper, TSale
         upd.setOrderId(orderId);
         upd.setOrderStatus(OrderStatusEnum.DELIVERED.getCode());
         upd.setDeliveryTime(LocalDateTime.now());
-        baseMapper.updateById(upd);
-        updateItemStatus(orderId, OrderStatusEnum.DELIVERED.getCode(), null);
+            // 本地标记放进独立小事务：调用 8085 拆单必须在事务外，否则两边同时写 t_sales_order_item 会互等行锁
+            transactionTemplate.executeWithoutResult(status -> {
+                baseMapper.updateById(upd);
+                updateItemStatus(orderId, OrderStatusEnum.PRODUCING.getCode(), null);
+            });
     }
 
     @Override
@@ -830,8 +918,11 @@ public class TSalesOrderServiceImpl extends ServiceImpl<TSalesOrderMapper, TSale
         upd.setOrderId(orderId);
         upd.setOrderStatus(OrderStatusEnum.COMPLETED.getCode());
         upd.setFinishTime(LocalDateTime.now());
-        baseMapper.updateById(upd);
-        updateItemStatus(orderId, OrderStatusEnum.COMPLETED.getCode(), null);
+            // 本地标记放进独立小事务：调用 8085 拆单必须在事务外，否则两边同时写 t_sales_order_item 会互等行锁
+            transactionTemplate.executeWithoutResult(status -> {
+                baseMapper.updateById(upd);
+                updateItemStatus(orderId, OrderStatusEnum.PRODUCING.getCode(), null);
+            });
     }
 
     @Override
@@ -846,8 +937,11 @@ public class TSalesOrderServiceImpl extends ServiceImpl<TSalesOrderMapper, TSale
         upd.setOrderId(orderId);
         upd.setOrderStatus(OrderStatusEnum.CANCELED.getCode());
         upd.setCancelReason(cancelReason);
-        baseMapper.updateById(upd);
-        updateItemStatus(orderId, OrderStatusEnum.ITEM_CANCELED.getCode(), null);
+            // 本地标记放进独立小事务：调用 8085 拆单必须在事务外，否则两边同时写 t_sales_order_item 会互等行锁
+            transactionTemplate.executeWithoutResult(status -> {
+                baseMapper.updateById(upd);
+                updateItemStatus(orderId, OrderStatusEnum.PRODUCING.getCode(), null);
+            });
     }
 
     // ==================================================================
@@ -1188,7 +1282,7 @@ public class TSalesOrderServiceImpl extends ServiceImpl<TSalesOrderMapper, TSale
                 putIfText(params, "把手方向", item.getHandleDirection());
                 putIfText(params, "加杆", item.getAddRod());
                 BigDecimal fbNum = parseNum(item.getFixedBottom());
-                params.put("下固定", fbNum != null ? fbNum : BigDecimal.ZERO);
+                if (fbNum != null) params.put("下固定", fbNum);   // 不填按未传处理，公式按 0 走分支，单子上留空不写 0
                 params.put("单价", nz(item.getUnitPrice()));
 
                 Map<String, Object> result = callFormulaCalc(item.getDictType(), item.getDictValue(), params);

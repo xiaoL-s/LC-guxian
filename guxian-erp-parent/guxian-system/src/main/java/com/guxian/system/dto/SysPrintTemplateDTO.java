@@ -20,6 +20,9 @@ public class SysPrintTemplateDTO {
     /** 纸张大小 */
     private String paperSize;
 
+    /** 适用产品（dictType:dictValue，逗号分隔；空=通用模板） */
+    private String bindProducts;
+
     /** 模板内容 */
     private String templateContent;
 

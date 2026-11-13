@@ -83,15 +83,12 @@ private SysMenuMapper sysMenuMapper;
             return Result.fail("密码错误");
         }
 
-        // 调用公共模块JwtUtil生成token
-        String token = jwtUtil.generateToken(user.getId(), user.getUsername(), user.getRealName(), user.getPostType());
 
         // 组装返回VO
         LoginRespVO resp = new LoginRespVO();
         resp.setId(user.getId());
         resp.setUsername(user.getUsername());
         resp.setRealName(user.getRealName());
-        resp.setToken(token);
 
         // 查用户角色code列表
         LambdaQueryWrapper<SysUserRole> urWrapper = new LambdaQueryWrapper<>();
@@ -108,6 +105,11 @@ private SysMenuMapper sysMenuMapper;
             roleCodes = roles.stream().map(SysRole::getRoleCode).collect(Collectors.toList());
         }
         resp.setRoleCodes(roleCodes);
+
+        // 角色一并签入token：各微服务的 JwtAuthInterceptor 据此做接口级鉴权（菜单看不到的功能，接口也调不通）
+        String token = jwtUtil.generateToken(user.getId(), user.getUsername(), user.getRealName(),
+                user.getPostType(), roleCodes);
+        resp.setToken(token);
 
         // 超级管理员标记：系统内置超管(id=1) 或 roles 中声明"超级管理员"
         boolean isAdmin = user.getId() != null && user.getId() == 1L

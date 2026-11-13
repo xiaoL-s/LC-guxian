@@ -61,6 +61,11 @@
       </div>
 
       <div v-loading="loading" class="order-list">
+        <!-- 初始空白态：进页面默认不加载，必须给出明确指引，避免被误判为系统坏了 -->
+        <el-empty v-if="!loading && tableData.length === 0 && !queried"
+          description="尚未查询：设置条件后点右上角「查询」加载订单" :image-size="90" />
+        <el-empty v-else-if="!loading && tableData.length === 0"
+          description="没有符合条件的订单，换个条件或点「重置」试试" :image-size="90" />
         <div v-for="(row, idx) in tableData" :key="row.orderId" class="order-card"
           :class="{ expanded: isExpanded(row) }">
           <!-- 信息栏（每格独立展示，不挤在一起） -->
@@ -183,7 +188,10 @@
           <!-- 展开的订单详情（在订单下方） -->
           <div v-if="isExpanded(row)" class="order-detail">
             <template v-if="row._detail">
-              <el-tabs v-model="detailTab" size="small">
+              <el-tabs
+                :model-value="detailTabMap[row.orderId!] || 'info'"
+                @update:model-value="(v: any) => detailTabMap[row.orderId!] = v"
+                size="small">
                 <el-tab-pane label="订单信息" name="info">
                   <el-descriptions :column="4" border size="small">
                     <el-descriptions-item label="订单号">{{ row._detail.orderNo }}</el-descriptions-item>
@@ -334,6 +342,9 @@
         <el-button size="small" type="primary" :loading="paying" @click="submitPay">确认收款</el-button>
       </template>
     </el-dialog>
+
+    <!-- 打印前选模板（默认自动按产品匹配） -->
+    <PrintTemplatePicker ref="tplPicker" />
   </div>
 </template>
 
@@ -349,10 +360,13 @@ import {
 } from '@/api/sales/order'
 import { getWorkOrderDetail } from '@/api/production/workorder'
 import { renderWorkOrdersHtml, renderSalesOrderHtml } from '@/utils/cuttingSheetRenderer'
+import PrintTemplatePicker from '@/components/PrintTemplatePicker.vue'
 import { ORDER_STATUS, FINANCE_STATUS, ORDER_TYPES, statusTag, financeTag, type SalesOrder } from '@/types/sales'
 
 const router = useRouter()
 const loading = ref(false)
+/** 是否已经主动查询过：用于区分"还没查"和"查了没结果"两种空态 */
+const queried = ref(false)
 const tableData = ref<SalesOrder[]>([])
 const total = ref(0)
 const page = reactive({ pageNum: 1, pageSize: 20 })
@@ -373,6 +387,7 @@ const onTabStatus = () => {
 // ---------------- 批量打印（打印即开工） ----------------
 const checkedIds = ref<number[]>([])
 const printing = ref(false)
+const tplPicker = ref<any>(null)
 const onCheck = (row: SalesOrder, checked: boolean) => {
   const id = row.orderId!
   const idx = checkedIds.value.indexOf(id)
@@ -403,6 +418,9 @@ const onCheckAll = (checked: boolean) => {
 const printSelected = async () => {
   const ids = [...checkedIds.value]
   if (!ids.length) { ElMessage.warning('请先勾选要打印的订单'); return }
+  // 打印前先选模板：默认自动按产品匹配，也可固定用某一套
+  const choice = await (tplPicker.value?.open('WORK_ORDER', '打印生产单') ?? Promise.resolve(null))
+  if (!choice) return
   printing.value = true
   try {
     const res: any = await printOrdersApi(ids)
@@ -411,20 +429,26 @@ const printSelected = async () => {
       return
     }
     const list: any[] = res.data || []
-    const okList = list.filter((x: any) => x.success && x.workId)
+    const okList = list.filter((x: any) => x.success)
     const failList = list.filter((x: any) => !x.success)
     if (failList.length) {
       ElMessage.warning(`${failList.length} 张订单打印失败：${failList.map((x: any) => x.orderNo || x.orderId).join('、')}（${failList[0]?.msg || ''}）`)
     }
-    if (!okList.length) return
-    // 逐个拉工单详情，合并成一份可打印文档（每单分页）
+    if (!okList.length) { ElMessage.error('没有可打印的订单'); return }
+    // 有工单走工单详情（带扫码报工二维码）；没工单退化成订单详情直接出生产单，保证一定能打印
     const details: any[] = []
     for (const x of okList) {
-      const d: any = await getWorkOrderDetail(x.workId)
-      if (d.code === 200) details.push(d.data)
+      if (x.workId) {
+        const d: any = await getWorkOrderDetail(x.workId)
+        if (d.code === 200) { details.push(d.data); continue }
+      }
+      const o: any = await getOrderInfo(x.orderId)
+      if (o.code === 200 && o.data) {
+        details.push({ ...o.data, workNo: x.workNo || o.data.orderNo, orderItems: o.data.itemList || o.data.orderItems || [] })
+      }
     }
-    if (!details.length) { ElMessage.error('工单详情加载失败，无法打印'); return }
-    const html = await renderWorkOrdersHtml(details, `批量生产单-${details.length}张`)
+    if (!details.length) { ElMessage.error('订单详情加载失败，无法打印'); return }
+    const html = await renderWorkOrdersHtml(details, `批量生产单-${details.length}张`, choice.templateId)
     const win = window.open('', '_blank')
     if (!win) { ElMessage.warning('浏览器拦截了弹窗，请允许弹窗后重试'); return }
     win.document.write(html)
@@ -454,7 +478,8 @@ import { hasEditPerm } from '@/utils/perm'
 
 // ---------------- 详情行内展开（点详情在订单下方展开，支持同时展开多个） ----------------
 const expandedIds = ref<Set<number>>(new Set())
-const detailTab = ref('info')
+/** 每张订单各自记住停留在哪个详情页签，避免同时展开多张卡时切一个、其他全跟着跳 */
+const detailTabMap = reactive<Record<number, string>>({})
 const isExpanded = (row: SalesOrder) => expandedIds.value.has(row.orderId!)
 
 /** 时间统一展示 yyyy-MM-dd HH:mm:ss（全局工具，见 utils/time.ts） */
@@ -538,8 +563,9 @@ const loadTable = async () => {
     if (res.code === 200) {
       tableData.value = res.data.records || []
       total.value = Number(res.data.total) || 0
-      // 列表刷新后收起已展开的详情
-      expandedId.value = null
+      // 列表刷新后收起所有已展开的详情（旧代码清的是已废弃的 expandedId，Set 实际没清）
+      expandedIds.value = new Set()
+      queried.value = true
     } else {
       ElMessage.error(res.msg || '查询失败')
     }
@@ -618,9 +644,11 @@ const submitPay = async () => {
 /** 打印销售单：读取订单详情 → 用 SALES_ORDER 模板渲染（与生产单同一套渲染器） */
 const printSales = async (row: any) => {
   try {
+    const choice = await (tplPicker.value?.open('SALES_ORDER', '打印销售单') ?? Promise.resolve(null))
+    if (!choice) return
     const res: any = await getOrderInfo(row.orderId)
     if (res.code !== 200 || !res.data) { ElMessage.error('订单详情加载失败'); return }
-    const html = await renderSalesOrderHtml(res.data, `销售单-${row.orderNo || ''}`)
+    const html = await renderSalesOrderHtml(res.data, `销售单-${row.orderNo || ''}`, choice.templateId)
     const win = window.open('', '_blank')
     if (!win) { ElMessage.warning('浏览器拦截了弹窗，请允许弹窗后重试'); return }
     win.document.write(html)

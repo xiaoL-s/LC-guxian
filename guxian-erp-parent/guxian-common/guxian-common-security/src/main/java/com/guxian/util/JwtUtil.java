@@ -36,13 +36,25 @@ public class JwtUtil {
      * 生成Token
      */
     public String generateToken(Long userId, String username, String realName, String postType) {
+        return generateToken(userId, username, realName, postType, null);
+    }
+
+    /**
+     * 生成Token（携带角色编码，供接口级鉴权使用）
+     *
+     * @param roleCodes 角色编码列表（admin/clerk/worker/prod_manager/finance/boss/hezuofang）
+     */
+    public String generateToken(Long userId, String username, String realName, String postType,
+                                java.util.List<String> roleCodes) {
         Date now = new Date();
         Date expireTime = new Date(now.getTime() + expireMs);
+        String roles = (roleCodes == null || roleCodes.isEmpty()) ? "" : String.join(",", roleCodes);
         return Jwts.builder()
                 .claim("userId", userId)
                 .claim("username", username)
                 .claim("realName", realName)
                 .claim("postType", postType)
+                .claim("roles", roles)
                 .setIssuedAt(now)
                 .setExpiration(expireTime)
                 .signWith(key)

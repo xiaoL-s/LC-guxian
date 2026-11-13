@@ -41,6 +41,10 @@ public class SysPrintTemplateServiceImpl
         template.setTemplateName(dto.getTemplateName());
         template.setTemplateType(dto.getTemplateType());
         template.setPaperSize(dto.getPaperSize());
+        // 传空串=清空绑定（变回通用模板）；传 null=保持原值不动
+        if (dto.getBindProducts() != null) {
+            template.setBindProducts(dto.getBindProducts().trim());
+        }
         template.setTemplateContent(dto.getTemplateContent());
         template.setIsDefault(dto.getIsDefault() != null && dto.getIsDefault() == 1 ? 1 : 0);
         template.setStatus(dto.getStatus() != null && dto.getStatus() == 1 ? 1 : 0);

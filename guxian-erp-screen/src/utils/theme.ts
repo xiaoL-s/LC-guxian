@@ -44,9 +44,14 @@ export function initTheme(): void {
   applyTheme(getStoredTheme())
 }
 
+/** 主题变更事件名：设置页切换后，顶栏的主题圆点等外部展示需要同步更新 */
+export const THEME_CHANGE_EVENT = 'gx-theme-change'
+
 export function saveTheme(key: string): void {
   localStorage.setItem(STORAGE_KEY, key)
   applyTheme(key)
+  // 同窗口 localStorage 不触发 storage 事件，用自定义事件通知其他组件
+  window.dispatchEvent(new CustomEvent(THEME_CHANGE_EVENT, { detail: key }))
 }
 
 export function currentTheme(): ThemeOption {

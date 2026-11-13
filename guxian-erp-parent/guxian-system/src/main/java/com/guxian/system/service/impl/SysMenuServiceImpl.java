@@ -36,7 +36,8 @@ public class SysMenuServiceImpl extends ServiceImpl<SysMenuMapper, SysMenu> impl
     private SysRoleMapper sysRoleMapper;
 
     /**
-     * 获取当前用户的菜单树（所有角色都能看到全部菜单，权限控制在按钮级别）
+     * 获取当前用户的菜单树：按 userId -> 角色 -> 角色菜单 过滤，admin 全量可见。
+     * 只配了子菜单没配父菜单时自动补全父级，避免树挂不上导致菜单整块消失。
      */
     @Override
     public List<SysMenuDTO> getUserMenuTree(Long userId) {
@@ -44,8 +45,54 @@ public class SysMenuServiceImpl extends ServiceImpl<SysMenuMapper, SysMenu> impl
         wrapper.eq(SysMenu::getDelFlag, 0);
         wrapper.orderByAsc(SysMenu::getSort);
         List<SysMenu> allMenuList = baseMapper.selectList(wrapper);
-        List<SysMenuDTO> dtoList = convertToDto(allMenuList);
-        return buildTree(dtoList, 0L);
+        List<SysMenu> visible = filterVisible(allMenuList, userId);
+        return buildTree(convertToDto(visible), 0L);
+    }
+
+    /** 按用户角色筛选菜单；超管(id=1 或角色含 admin)返回全量 */
+    private List<SysMenu> filterVisible(List<SysMenu> all, Long userId) {
+        if (userId == null) {
+            return new ArrayList<>();
+        }
+        if (userId == 1L) {
+            return all;
+        }
+        List<SysUserRole> userRoles = sysUserRoleMapper.selectList(
+                new LambdaQueryWrapper<SysUserRole>().eq(SysUserRole::getUserId, userId));
+        List<Long> roleIds = userRoles.stream().map(SysUserRole::getRoleId).collect(Collectors.toList());
+        if (roleIds.isEmpty()) {
+            return new ArrayList<>();
+        }
+        List<SysRole> roles = sysRoleMapper.selectList(
+                new LambdaQueryWrapper<SysRole>().in(SysRole::getId, roleIds).eq(SysRole::getDelFlag, 0));
+        boolean isAdmin = roles.stream().anyMatch(r -> "admin".equals(r.getRoleCode()));
+        if (isAdmin) {
+            return all;
+        }
+        List<SysRoleMenu> roleMenus = sysRoleMenuMapper.selectList(
+                new LambdaQueryWrapper<SysRoleMenu>().in(SysRoleMenu::getRoleId, roleIds));
+        Set<Long> granted = roleMenus.stream().map(SysRoleMenu::getMenuId).collect(Collectors.toSet());
+        if (granted.isEmpty()) {
+            return new ArrayList<>();
+        }
+        // 补全父级链
+        Set<Long> finalIds = new HashSet<>(granted);
+        for (Long id : new ArrayList<>(granted)) {
+            Long parentId = parentIdOf(all, id);
+            while (parentId != null && parentId != 0L && finalIds.add(parentId)) {
+                parentId = parentIdOf(all, parentId);
+            }
+        }
+        return all.stream().filter(m -> finalIds.contains(m.getId())).collect(Collectors.toList());
+    }
+
+    private Long parentIdOf(List<SysMenu> all, Long menuId) {
+        for (SysMenu m : all) {
+            if (m.getId().equals(menuId)) {
+                return m.getParentId();
+            }
+        }
+        return null;
     }
 
     /**

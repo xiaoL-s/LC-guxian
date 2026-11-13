@@ -33,6 +33,10 @@ public class SysPrintTemplate implements Serializable {
     @TableField("paper_size")
     private String paperSize;
 
+    /** 适用产品（dictType:dictValue，逗号分隔；空=通用模板，任何产品可用） */
+    @TableField("bind_products")
+    private String bindProducts;
+
     /** 模板内容（含 ${变量} 占位符） */
     @TableField("template_content")
     private String templateContent;

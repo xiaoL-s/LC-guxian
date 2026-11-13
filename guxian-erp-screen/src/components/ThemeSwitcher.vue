@@ -28,8 +28,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { THEMES, initTheme, currentTheme, saveTheme, applyTheme, type ThemeOption } from '@/utils/theme'
+import { ref, onMounted, onUnmounted } from 'vue'
+import { THEMES, initTheme, currentTheme, saveTheme, applyTheme, THEME_CHANGE_EVENT, type ThemeOption } from '@/utils/theme'
 
 const themes = THEMES
 const current = ref<ThemeOption>(currentTheme())
@@ -38,6 +38,11 @@ onMounted(() => {
   initTheme()
   current.value = currentTheme()
 })
+
+// 设置页里切换主题时，顶栏这个小圆点也要跟着变
+const onThemeChange = () => { current.value = currentTheme() }
+window.addEventListener(THEME_CHANGE_EVENT, onThemeChange)
+onUnmounted(() => window.removeEventListener(THEME_CHANGE_EVENT, onThemeChange))
 
 const handleSelect = (key: string) => {
   saveTheme(key)

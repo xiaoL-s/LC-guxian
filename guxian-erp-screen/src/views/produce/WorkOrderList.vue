@@ -164,6 +164,9 @@
         <el-button size="small" type="success" :loading="finishing" @click="submitFinish">确认完工入库</el-button>
       </template>
     </el-dialog>
+
+    <!-- 打印生产单前选模板（默认自动按产品匹配） -->
+    <PrintTemplatePicker ref="tplPicker" />
   </div>
 </template>
 
@@ -178,12 +181,14 @@ import { getShelfEnabled } from '@/api/stock/material'
 import { WORK_STATUS, type WorkOrder } from '@/types/production'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { renderWorkOrderHtml } from '@/utils/cuttingSheetRenderer'
+import PrintTemplatePicker from '@/components/PrintTemplatePicker.vue'
 import { fmtTime } from '@/utils/time'
 
 const loading = ref(false)
 const tableData = ref<any[]>([])
 const total = ref(0)
 const page = reactive({ pageNum: 1, pageSize: 10 })
+const tplPicker = ref<any>(null)
 const search = reactive({ keyword: '', workStatus: '' as string })
 // 是否超级管理员：撤回等高危操作仅超管可见可点
 const isAdmin = ref(false)
@@ -338,8 +343,10 @@ const undoFinish = () => {
 const onPrintCutting = async () => {
   const d: any = detail
   if (!d.workId) { ElMessage.warning('请先打开工单详情'); return }
+  const choice = await (tplPicker.value?.open('WORK_ORDER', '打印生产单') ?? Promise.resolve(null))
+  if (!choice) return
   try {
-    const html = await renderWorkOrderHtml(d, `生产单-${d.workNo || ''}`)
+    const html = await renderWorkOrderHtml(d, `生产单-${d.workNo || ''}`, choice.templateId)
     const win = window.open('', '_blank')
     if (!win) { ElMessage.warning('浏览器拦截了弹窗，请允许弹窗后重试'); return }
     win.document.write(html)

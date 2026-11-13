@@ -1,7 +1,7 @@
 <template>
   <div class="system-layout">
     <!-- 把收缩状态传给侧边栏 -->
-    <SideBar :menu-list="menuTree" :is-collapse="isCollapse"/>
+    <SideBar :menu-list="menuTree" :is-collapse="isCollapse" @expand-sidebar="isCollapse = false"/>
 
     <div class="main-wrap">
       <header class="top-header">
@@ -28,9 +28,13 @@
       </header>
       <div class="content">
         <BreadcrumbTabs />
+        <!-- 注意：keep-alive 内部只能有一个子节点，注释也不能放进去（dev 模式不剥离注释会报
+             "KeepAlive expects exactly one child component"） -->
+        <!-- key 带上 orderId：新建/编辑订单共用 /sales/order/edit，只用 path 会复用同一实例，
+             导致打开编辑时显示的仍是上一张单（onMounted 不再执行） -->
         <router-view v-slot="{ Component }">
           <keep-alive :include="cachedNames">
-            <component :is="Component" :key="route.path"/>
+            <component :is="Component" :key="route.path + '|' + (route.query.orderId ?? '')"/>
           </keep-alive>
         </router-view>
       </div>

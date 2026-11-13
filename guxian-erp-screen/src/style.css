@@ -293,3 +293,79 @@ body {
   color: #303133;
   margin-bottom: 4px;
 }
+
+/* ============================================================
+   7. 用户手动设置（「系统设置」页面）
+   ------------------------------------------------------------
+   这些 class 加在 html 上，特异性高于上面的 :root，因此能覆盖
+   屏幕自动分档的 media query —— 用户手动选的优先。
+   变量出口：--gx-font / --gx-font-sm / --gx-row-h / --gx-pad / --gx-sidebar-w
+   ============================================================ */
+
+/* ---------- 字号档（同时驱动 Element Plus 组件内建字号） ---------- */
+html.gx-fs-s {
+  --gx-font: 12.5px;
+  --gx-font-sm: 11.5px;
+  --el-font-size-base: 12.5px;
+  --el-font-size-small: 12px;
+  --el-font-size-medium: 15px;
+  --el-font-size-large: 17px;
+}
+html.gx-fs-m {
+  --gx-font: 14px;
+  --gx-font-sm: 12.5px;
+  --el-font-size-base: 14px;
+  --el-font-size-small: 13px;
+  --el-font-size-medium: 16px;
+  --el-font-size-large: 18px;
+}
+html.gx-fs-l {
+  --gx-font: 16px;
+  --gx-font-sm: 14px;
+  --el-font-size-base: 16px;
+  --el-font-size-small: 14.5px;
+  --el-font-size-medium: 18px;
+  --el-font-size-large: 21px;
+  --el-component-size: 36px;
+  --el-component-size-small: 30px;
+  --el-component-size-large: 44px;
+}
+html.gx-fs-xl {
+  --gx-font: 18px;
+  --gx-font-sm: 15.5px;
+  --el-font-size-base: 18px;
+  --el-font-size-small: 16px;
+  --el-font-size-medium: 20px;
+  --el-font-size-large: 23px;
+  --el-component-size: 40px;
+  --el-component-size-small: 34px;
+  --el-component-size-large: 48px;
+}
+
+/* ---------- 界面密度（表格行高 + 页面间距） ---------- */
+html.gx-density-compact {
+  --gx-row-h: 34px;
+  --gx-pad: 12px;
+}
+html.gx-density-normal {
+  --gx-row-h: 44px;
+  --gx-pad: 20px;
+}
+html.gx-density-loose {
+  --gx-row-h: 54px;
+  --gx-pad: 26px;
+}
+
+/* ---------- 侧栏宽度 ---------- */
+html.gx-sb-narrow { --gx-sidebar-w: 160px; }
+html.gx-sb-wide   { --gx-sidebar-w: 230px; }
+
+/* ---------- 表格斑马纹 ----------
+   用 nth-child 实现，不依赖 el-table 的 stripe 属性，所有表格统一生效。 */
+html.gx-zebra .el-table__body tr:nth-child(even) > td.el-table__cell {
+  background-color: rgba(64, 158, 255, 0.04);
+}
+/* hover 要压过斑马纹，否则鼠标划过看不出高亮 */
+html.gx-zebra .el-table__body tr:hover > td.el-table__cell {
+  background: var(--gx-hover-bg);
+}

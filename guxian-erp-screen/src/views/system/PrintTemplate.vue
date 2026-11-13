@@ -32,12 +32,18 @@
       <el-table :data="tableData" border stripe v-loading="loading">
         <el-table-column prop="templateName" label="模板名称" min-width="160" />
         <el-table-column prop="templateType" label="单据类型" width="120" />
+        <el-table-column label="适用产品" min-width="220">
+          <template #default="scope">
+            <span v-if="!scope.row.bindProducts" class="dash">通用</span>
+            <span v-else :title="bindLabel(scope.row.bindProducts)">{{ bindLabel(scope.row.bindProducts) }}</span>
+          </template>
+        </el-table-column>
         <el-table-column label="使用位置" min-width="260">
           <template #default="scope">
-            <span :class="{ 'usage-active': scope.row.templateType === 'WORK_ORDER' && scope.row.isDefault === 1 }">
-              {{ usageOf(scope.row.templateType, scope.row.isDefault) }}
+            <span :class="{ 'usage-active': scope.row.templateType === 'WORK_ORDER' && (scope.row.isDefault === 1 || !!scope.row.bindProducts) }">
+              {{ usageOf(scope.row.templateType, scope.row.isDefault, scope.row.bindProducts) }}
             </span>
-            <el-button v-if="scope.row.templateType === 'WORK_ORDER' && scope.row.isDefault !== 1"
+            <el-button v-if="scope.row.templateType === 'WORK_ORDER' && scope.row.isDefault !== 1 && !scope.row.bindProducts"
               type="primary" link size="small" style="margin-left:6px" @click="setAsPrintTemplate(scope.row)">
               设为打印模板
             </el-button>
@@ -99,6 +105,13 @@
                 <el-option label="A4横向" value="A4_LANDSCAPE" />
                 <el-option label="A4纵向" value="A4" />
                 <el-option label="A5" value="A5" />
+              </el-select>
+            </el-form-item>            <el-form-item label="适用产品">
+              <el-select v-model="form.bindProducts" multiple filterable clearable collapse-tags
+                         :max-collapse-tags="2" placeholder="不选=通用模板（任何产品）" style="width:320px">
+                <el-option-group v-for="g in productGroups" :key="g.type" :label="g.name">
+                  <el-option v-for="p in g.items" :key="p.key" :label="p.label" :value="p.key" />
+                </el-option-group>
               </el-select>
             </el-form-item>
             <el-form-item label="状态">
@@ -381,6 +394,7 @@ import {
   togglePrintTemplateStatus,
   getPrintTemplateTypes
 } from '@/api/system/printTemplate'
+import { getDictTypePage, getDictDataPage } from '@/api/system/dict'
 import { renderPrintBody, buildDefaultBlocks, buildSalesDefaultBlocks, buildPrintContext, buildSalesContext, wrapPrintDocument, buildTableHeadRows, totalColIndex, DEFAULT_COLS, prepareQrData, type PrintBlock } from '@/utils/cuttingSheetRenderer'
 
 /* ===================== 列表 ===================== */
@@ -391,6 +405,46 @@ const pageNum = ref(1)
 const pageSize = ref(10)
 const searchForm = reactive({ templateName: '', templateType: '', status: '' as number | '' })
 const typeOptions = ref<string[]>([])
+
+/* ===================== 适用产品（模板绑定到具体产品） ===================== */
+interface ProductOpt { key: string; label: string; type: string }
+const productList = ref<ProductOpt[]>([])
+const typeNameMap = ref<Record<string, string>>({})
+const productIndex = computed(() => {
+  const m: Record<string, string> = {}
+  productList.value.forEach(p => { m[p.key] = p.label })
+  return m
+})
+const productGroups = computed(() => {
+  const groups: { type: string; name: string; items: ProductOpt[] }[] = []
+  productList.value.forEach(p => {
+    let g = groups.find(x => x.type === p.type)
+    if (!g) { g = { type: p.type, name: typeNameMap.value[p.type] || p.type, items: [] }; groups.push(g) }
+    g.items.push(p)
+  })
+  return groups
+})
+const loadProducts = async () => {
+  try {
+    const [typeRes, dataRes]: any[] = await Promise.all([
+      getDictTypePage({ pageNum: 1, pageSize: 100 }),
+      getDictDataPage({ pageNum: 1, pageSize: 500 })
+    ])
+    const typeMap: Record<string, string> = {}
+    ;(typeRes.data?.records || []).forEach((t: any) => { typeMap[t.dictType] = t.dictName })
+    typeNameMap.value = typeMap
+    productList.value = (dataRes.data?.records || []).map((d: any) => ({
+      key: `${d.dictType}:${d.dictValue}`,
+      label: d.dictLabel,
+      type: d.dictType
+    }))
+  } catch (e) { console.warn('[打印模板] 产品列表加载失败', e) }
+}
+/** 把 bind_products 转成产品名展示 */
+const bindLabel = (str?: string) => {
+  const keys = String(str || '').split(',').map(s => s.trim()).filter(Boolean)
+  return keys.map(k => productIndex.value[k] || k).join('、')
+}
 const loadTypes = async () => {
   const res: any = await getPrintTemplateTypes()
   typeOptions.value = res.data || []
@@ -410,9 +464,11 @@ const resetSearch = () => {
 }
 const paperLabel = (p?: string) =>
   p === 'A4' ? 'A4纵向' : p === 'A4_LANDSCAPE' ? 'A4横向' : p === 'A5' ? 'A5' : (p || '—')
-const usageOf = (type: string, isDefault: number) => {
+const usageOf = (type: string, isDefault: number, bind?: string) => {
   if (type === 'WORK_ORDER') {
-    return isDefault === 1 ? '生产工单 → 打印生产单（当前生效）' : '生产工单 → 打印生产单（备用，需设为默认）'
+    if (isDefault === 1) return '生产工单 → 打印生产单（通用默认）'
+    if (String(bind || '').trim()) return '生产工单 → 按产品自动匹配'
+    return '生产工单 → 打印生产单（未启用）'
   }
   if (type === 'SALES_ORDER' || type === '销售订单') return '销售订单打印（预留）'
   return '未关联业务入口'
@@ -799,7 +855,8 @@ const isEdit = ref(false)
 const form = reactive({
   templateId: null as number | null,
   templateName: '', templateType: 'WORK_ORDER',
-  paperSize: 'A4_LANDSCAPE', isDefault: 0, status: 1, templateContent: ''
+  paperSize: 'A4_LANDSCAPE', isDefault: 0, status: 1, templateContent: '',
+  bindProducts: [] as string[]
 })
 const hasDefaultForType = async (type: string) => {
   try {
@@ -819,7 +876,8 @@ const openDialog = async (row?: any) => {
       templateType: row.templateType,
       paperSize: row.paperSize === 'A4' ? 'A4' : 'A4_LANDSCAPE',
       isDefault: row.isDefault === 1 ? 1 : 0,
-      status: row.status === 1 ? 1 : 0
+      status: row.status === 1 ? 1 : 0,
+      bindProducts: String(row.bindProducts || '').split(',').map((s: string) => s.trim()).filter(Boolean)
     })
     try {
       const parsed = JSON.parse(row.templateContent || '[]')
@@ -836,7 +894,7 @@ const openDialog = async (row?: any) => {
     const exists = await hasDefaultForType('WORK_ORDER')
     Object.assign(form, {
       templateId: null, templateName: '', templateType: 'WORK_ORDER',
-      paperSize: 'A4_LANDSCAPE', isDefault: exists ? 0 : 1, status: 1
+      paperSize: 'A4_LANDSCAPE', isDefault: exists ? 0 : 1, status: 1, bindProducts: []
     })
     loadDefaultTemplate()
   }
@@ -855,12 +913,15 @@ const submitForm = async () => {
   if (!form.templateName) { ElMessage.warning('请填模板名称'); return }
   validSelection()
   form.templateContent = JSON.stringify(blocks.value)
-  const res: any = await savePrintTemplate(form)
+  const res: any = await savePrintTemplate({ ...form, bindProducts: form.bindProducts.join(',') })
   if (res.code === 200) {
-    const effective = form.templateType === 'WORK_ORDER' && form.isDefault === 1 && form.status === 1
+    const effective = form.templateType === 'WORK_ORDER' && form.status === 1
+      && (form.isDefault === 1 || form.bindProducts.length > 0)
     ElMessage.success(effective
-      ? '保存成功，生产工单「打印生产单」将使用该模板'
-      : '保存成功；如需工单打印使用它，请在列表中点「设为打印模板」')
+      ? (form.bindProducts.length > 0
+        ? '保存成功：订单里含这些产品时，打印生产单将自动使用该模板'
+        : '保存成功，生产工单「打印生产单」将使用该模板')
+      : '保存成功；如需工单打印使用它，请绑定适用产品或设为默认模板')
     dialogVisible.value = false
     loadTable()
   }
@@ -966,7 +1027,7 @@ watch(dialogVisible, v => {
   else document.removeEventListener('keydown', onKey)
 })
 onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
-onMounted(() => { loadTypes(); loadTable() })
+onMounted(() => { loadTypes(); loadProducts(); loadTable() })
 </script>
 <style scoped>
 .print-template-page { padding: 16px; }

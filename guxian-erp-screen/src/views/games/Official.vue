@@ -29,6 +29,13 @@
         <p>人机对战，挑战AI看你能赢几局</p>
         <el-button type="primary" round>开始游戏</el-button>
       </el-card>
+
+      <el-card shadow="hover" class="game-card" @click="goGame('chess')">
+        <div class="game-icon">♟️</div>
+        <h3>中国象棋</h3>
+        <p>人机对战，红先黑后，吃掉对方老将即胜</p>
+        <el-button type="primary" round>开始游戏</el-button>
+      </el-card>
     </div>
 
     <el-card shadow="never" class="tips-card">

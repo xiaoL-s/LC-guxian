@@ -8,6 +8,7 @@
           placeholder="🔍 输入产品名称，全库搜索..."
           size="large"
           clearable
+          @keyup.enter="doGlobalSearch"
         />
         <el-button type="primary" size="large" @click="doGlobalSearch">搜索</el-button>
         <el-button v-if="searchMode" size="large" @click="exitGlobalSearch">返回分类浏览</el-button>

@@ -48,10 +48,10 @@ mybatis-plus:
 management:
   tracing:
     sampling:
-      probability: 1.0
+      probability: ${TRACING_SAMPLING:0.1}
   zipkin:
     tracing:
-      endpoint: http://127.0.0.1:9411/api/v2/spans
+      endpoint: ${ZIPKIN_ENDPOINT:http://127.0.0.1:9411/api/v2/spans}
 
 logging:
   pattern:
