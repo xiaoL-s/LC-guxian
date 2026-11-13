@@ -5,6 +5,7 @@ import com.guxian.exception.ResultCodeEnum;
 import com.guxian.context.UserContext;
 import com.guxian.model.LoginUser;
 import com.guxian.security.ApiPermissionGuard;
+import com.guxian.security.TokenBlacklistStore;
 import com.guxian.util.JwtUtil;
 import io.jsonwebtoken.Claims;
 import org.springframework.stereotype.Component;
@@ -27,6 +28,9 @@ public class JwtAuthInterceptor implements HandlerInterceptor {
     @Resource
     private JwtUtil jwtUtil;
 
+    @Resource
+    private TokenBlacklistStore tokenBlacklistStore;
+
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
         // CORS预检请求（OPTIONS）直接放行，不做token校验，否则刷新/跨域场景会401
@@ -39,6 +43,11 @@ public class JwtAuthInterceptor implements HandlerInterceptor {
             throw new BusinessException(ResultCodeEnum.TOKEN_EXPIRE.getCode(), ResultCodeEnum.TOKEN_EXPIRE.getMsg());
         }
         token = token.substring(7);
+
+        // 已登出的 token 立即失效（即便签名与有效期都合法），避免退出后旧 token 还能用
+        if (tokenBlacklistStore.isRevoked(token)) {
+            throw new BusinessException(ResultCodeEnum.TOKEN_EXPIRE.getCode(), "登录状态已失效，请重新登录");
+        }
 
         Claims claims;
         try {

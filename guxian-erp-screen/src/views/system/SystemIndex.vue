@@ -46,6 +46,7 @@
 import { ref, computed, onMounted, provide } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getUserMenu } from '@/api/system/menu'
+import { logoutApi } from '@/api/system/login'
 import SideBar from '@/components/SideBar.vue'
 import ThemeSwitcher from '@/components/ThemeSwitcher.vue'
 import BreadcrumbTabs from '@/components/BreadcrumbTabs.vue'
@@ -89,7 +90,13 @@ onMounted(async () => {
 const menuTree = ref<any[]>([])
 
 // 退出登录逻辑
-const handleLogout = ()=>{
+const handleLogout = async ()=>{
+  // 先通知服务端把 token 拉黑（失败也照样退，本地一定能清干净）
+  try {
+    await logoutApi()
+  } catch {
+    // 网络异常 / token 已过期：服务端已无法使用该 token，忽略即可
+  }
   // 清除token、用户信息、菜单展开状态
   localStorage.removeItem('token')
   localStorage.removeItem('loginUser')

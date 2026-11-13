@@ -78,4 +78,21 @@ public class JwtUtil {
     public boolean isExpire(Claims claims) {
         return claims.getExpiration().before(new Date());
     }
+
+    /**
+     * token 剩余有效秒数（登出拉黑时按剩余时长设置过期，避免黑名单无限增长）
+     * 已过期或解析不到过期时间时返回 0
+     */
+    public long remainingSeconds(Claims claims) {
+        Date expiration = claims.getExpiration();
+        if (expiration == null) {
+            return 0L;
+        }
+        long remainMs = expiration.getTime() - System.currentTimeMillis();
+        if (remainMs <= 0) {
+            return 0L;
+        }
+        // 不足 1 秒按 1 秒算，保证刚签发的 token 也能被拉黑
+        return Math.max(1L, remainMs / 1000L);
+    }
 }
